@@ -2,8 +2,10 @@ import math
 import numpy as np
 import pandas as pd
 import traceback
+import os
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from matplotlib import font_manager
 from makeHistory import make_history
 
 def calculate_trendline(df, window=14, aspect_ratio=4):
@@ -499,8 +501,19 @@ def plot_backtest_results(df, result, save_path='backtest_result.png'):
     try:
         trades = result['trades']
         
-        # 한글 폰트 설정 (Windows)
-        plt.rcParams['font.family'] = 'Malgun Gothic'  # 맑은 고딕
+        # 한글 폰트 설정 (로컬 파일 사용)
+        font_path = os.path.join(os.path.dirname(__file__), 'malgun.ttf')
+        if os.path.exists(font_path):
+            # 폰트를 matplotlib에 등록
+            font_manager.fontManager.addfont(font_path)
+            # 폰트 속성 가져오기
+            font_prop = font_manager.FontProperties(fname=font_path)
+            font_name = font_prop.get_name()
+            plt.rcParams['font.family'] = font_name
+        else:
+            # 폰트 파일이 없으면 기본 폰트 사용 시도
+            print(f"경고: 폰트 파일을 찾을 수 없습니다: {font_path}")
+            plt.rcParams['font.family'] = 'DejaVu Sans'
         plt.rcParams['axes.unicode_minus'] = False  # 마이너스 기호 깨짐 방지
         
         # 4개의 서브플롯 생성: 가격, 각도, 보유 구간, 누적 수익률
