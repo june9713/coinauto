@@ -27,8 +27,19 @@ class ResultReporter:
             print("백테스트 결과")
             print("="*80)
             print(f"초기 자본: {result['initial_capital']:,.0f}원")
-            print(f"최종 자산: {result['final_asset']:,.0f}원")
+            print(f"최종 자산: {result['final_asset']:,.0f}원 (백테스트 종료 시점의 자산 평가)")
             print(f"총 수익률: {result['total_return']:+.2f}%")
+            
+            # 보유 중인 경우 추가 설명
+            if result.get('last_trade_status') == 'hold':
+                print(f"\n※ 현재 보유 중입니다. 최종 자산은 마지막 캔들의 종가로 평가되었습니다.")
+                if len(trades) > 0:
+                    last_trade = trades[-1]
+                    if last_trade['action'].startswith('BUY') and 'total_asset' in last_trade:
+                        print(f"※ 매수 직후 자산 평가: {last_trade['total_asset']:,.0f}원")
+                        print(f"※ 최종 자산 평가: {result['final_asset']:,.0f}원")
+                        diff = result['final_asset'] - last_trade['total_asset']
+                        print(f"※ 자산 변화: {diff:+,.0f}원 (보유 중 가격 변동)")
             print(f"\n총 거래 횟수: {result['total_trades']}회")
             print(f"매수 횟수: {result['buy_count']}회")
             print(f"매도 횟수: {result['sell_count']}회")
@@ -77,7 +88,13 @@ class ResultReporter:
                         losing_trades += 1
                 
                 if 'total_asset' in trade:
-                    print(f"  거래 후 총 자산: {trade['total_asset']:,.0f}원")
+                    # 매수 거래인 경우, 이건 거래 직후의 자산 평가 (해당 캔들 종가 기준)
+                    # 매도 거래인 경우, 이미 매도가 완료된 후의 자산
+                    if action.startswith('BUY'):
+                        print(f"  거래 직후 자산 평가 (해당 캔들 종가 기준): {trade['total_asset']:,.0f}원")
+                        print(f"  ※ 백테스트 종료 시 최종 자산은 마지막 캔들의 종가로 재평가됩니다")
+                    else:
+                        print(f"  거래 후 총 자산: {trade['total_asset']:,.0f}원")
                 
                 if 'angle' in trade and trade['angle'] is not None:
                     print(f"  추세선 각도: {trade['angle']:.2f}°")

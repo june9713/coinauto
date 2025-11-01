@@ -52,37 +52,108 @@ class DataManager:
     def load_history_from_file(self):
         """
         저장된 데이터 파일에서 데이터를 로드합니다.
+        단일 파일이 없으면 날짜별 폴더에서 시간별 분할 파일들을 찾아 로드합니다.
         
         Returns:
         - pd.DataFrame: 저장된 OHLCV 데이터프레임. 파일이 없으면 None 반환
         """
         try:
-            if not os.path.exists(self.data_file):
+            # 먼저 단일 파일 확인
+            if os.path.exists(self.data_file):
+                print(f"기록 파일 로드 중: {self.data_file}")
+                df = pd.read_csv(self.data_file, index_col=0, parse_dates=True)
+                
+                # 컬럼명 확인 및 정리
+                required_columns = ['open', 'high', 'low', 'close', 'volume']
+                for col in required_columns:
+                    if col not in df.columns:
+                        print(f"경고: 필수 컬럼 '{col}'이 파일에 없습니다.")
+                
+                # 인덱스를 datetime으로 변환
+                if not isinstance(df.index, pd.DatetimeIndex):
+                    df.index = pd.to_datetime(df.index)
+                
+                # 중복 제거 및 정렬
+                df = df[~df.index.duplicated(keep='first')]
+                df = df.sort_index()
+                
+                print(f"기록 파일 로드 완료: {len(df)}개 데이터")
+                if len(df) > 0:
+                    print(f"  기간: {df.index[0]} ~ {df.index[-1]}")
+                
+                return df
+            
+            # 단일 파일이 없으면 날짜별 폴더에서 시간별 분할 파일들 찾기
+            print("날짜별 폴더에서 시간별 분할 파일을 검색합니다...")
+            
+            # 파일명에서 조건 부분 추출 (확장자 제외)
+            base_filename = os.path.basename(self.data_file)
+            name_without_ext = os.path.splitext(base_filename)[0]
+            
+            # 날짜별 폴더에서 해당 조건으로 시작하는 모든 시간별 파일 찾기
+            all_dataframes = []
+            
+            if os.path.exists(self.data_dir):
+                # 날짜별 폴더 목록 가져오기 (YYYY-MM-DD 형식)
+                date_folders = []
+                for item in os.listdir(self.data_dir):
+                    item_path = os.path.join(self.data_dir, item)
+                    if os.path.isdir(item_path) and len(item) == 10 and item.count('-') == 2:
+                        try:
+                            # 날짜 형식 검증
+                            datetime.strptime(item, '%Y-%m-%d')
+                            date_folders.append(item)
+                        except ValueError:
+                            continue
+                
+                # 날짜순으로 정렬
+                date_folders.sort()
+                
+                # 각 날짜 폴더에서 시간별 파일 찾기
+                for date_folder in date_folders:
+                    date_dir = os.path.join(self.data_dir, date_folder)
+                    if not os.path.isdir(date_dir):
+                        continue
+                    
+                    # 해당 날짜 폴더의 모든 파일 확인
+                    for filename in os.listdir(date_dir):
+                        if filename.startswith(name_without_ext) and filename.endswith('.csv'):
+                            file_path = os.path.join(date_dir, filename)
+                            try:
+                                file_df = pd.read_csv(file_path, index_col=0, parse_dates=True)
+                                if len(file_df) > 0:
+                                    all_dataframes.append(file_df)
+                            except Exception as e:
+                                print(f"경고: 파일 로드 실패 ({file_path}): {e}")
+                                continue
+            
+            if len(all_dataframes) == 0:
                 print(f"기록 파일이 없습니다: {self.data_file}")
                 return None
             
-            print(f"기록 파일 로드 중: {self.data_file}")
-            df = pd.read_csv(self.data_file, index_col=0, parse_dates=True)
+            # 모든 데이터프레임 병합
+            combined_df = pd.concat(all_dataframes)
             
             # 컬럼명 확인 및 정리
             required_columns = ['open', 'high', 'low', 'close', 'volume']
             for col in required_columns:
-                if col not in df.columns:
-                    print(f"경고: 필수 컬럼 '{col}'이 파일에 없습니다.")
+                if col not in combined_df.columns:
+                    print(f"경고: 필수 컬럼 '{col}'이 데이터에 없습니다.")
             
             # 인덱스를 datetime으로 변환
-            if not isinstance(df.index, pd.DatetimeIndex):
-                df.index = pd.to_datetime(df.index)
+            if not isinstance(combined_df.index, pd.DatetimeIndex):
+                combined_df.index = pd.to_datetime(combined_df.index)
             
             # 중복 제거 및 정렬
-            df = df[~df.index.duplicated(keep='first')]
-            df = df.sort_index()
+            combined_df = combined_df[~combined_df.index.duplicated(keep='last')]
+            combined_df = combined_df.sort_index()
             
-            print(f"기록 파일 로드 완료: {len(df)}개 데이터")
-            if len(df) > 0:
-                print(f"  기간: {df.index[0]} ~ {df.index[-1]}")
+            print(f"기록 파일 로드 완료 (시간별 분할 파일 병합): {len(combined_df)}개 데이터")
+            if len(combined_df) > 0:
+                print(f"  기간: {combined_df.index[0]} ~ {combined_df.index[-1]}")
+                print(f"  로드된 파일 수: {len(all_dataframes)}개")
             
-            return df
+            return combined_df
             
         except Exception as e:
             err = traceback.format_exc()
@@ -123,23 +194,50 @@ class DataManager:
                 filename = f"{name_without_ext}_{hour_str}.csv"
                 save_path = os.path.join(date_dir, filename)
                 
-                # 새로운 데이터만 저장 (이전 파일과 병합하지 않음)
-                # 해당 시간대의 데이터만 필터링 (선택사항: 필요시 주석 해제)
-                # hour_start = now.replace(minute=0, second=0, microsecond=0)
-                # hour_end = hour_start + timedelta(hours=1)
-                # hour_df = df[(df.index >= hour_start) & (df.index < hour_end)]
-                # if len(hour_df) > 0:
-                #     hour_df.to_csv(save_path, index=True)
-                # else:
-                #     print(f"해당 시간대에 새로운 데이터가 없습니다. 파일 저장 생략.")
-                #     return
-                
-                # 새로운 데이터가 있는 경우에만 저장
-                df.to_csv(save_path, index=True)
-                print(f"기록 파일 저장 완료 (실시간 업데이트): {save_path}")
-                print(f"  총 {len(df)}개 데이터")
-                if len(df) > 0:
-                    print(f"  기간: {df.index[0]} ~ {df.index[-1]}")
+                # 기존 파일이 있으면 로드하여 병합
+                if os.path.exists(save_path):
+                    try:
+                        existing_df = pd.read_csv(save_path, index_col=0, parse_dates=True)
+                        
+                        # 인덱스를 datetime으로 변환
+                        if not isinstance(existing_df.index, pd.DatetimeIndex):
+                            existing_df.index = pd.to_datetime(existing_df.index)
+                        
+                        # 중복 제거 및 정렬
+                        existing_df = existing_df[~existing_df.index.duplicated(keep='first')]
+                        existing_df = existing_df.sort_index()
+                        
+                        # 기존 데이터와 새 데이터 병합
+                        combined_df = pd.concat([existing_df, df])
+                        combined_df = combined_df[~combined_df.index.duplicated(keep='last')]  # 중복 시 새로운 데이터 우선
+                        combined_df = combined_df.sort_index()
+                        
+                        print(f"기존 파일 발견: {len(existing_df)}개 데이터")
+                        print(f"새로운 데이터: {len(df)}개")
+                        print(f"병합 후: {len(combined_df)}개 데이터")
+                        
+                        # 병합된 데이터 저장
+                        combined_df.to_csv(save_path, index=True)
+                        print(f"기록 파일 저장 완료 (실시간 업데이트, 기존 데이터 병합): {save_path}")
+                        print(f"  총 {len(combined_df)}개 데이터")
+                        if len(combined_df) > 0:
+                            print(f"  기간: {combined_df.index[0]} ~ {combined_df.index[-1]}")
+                    except Exception as e:
+                        # 기존 파일 로드 실패 시 새 데이터만 저장
+                        print(f"경고: 기존 파일 로드 실패 ({save_path}): {e}")
+                        print(f"  새 데이터만 저장합니다.")
+                        df.to_csv(save_path, index=True)
+                        print(f"기록 파일 저장 완료 (실시간 업데이트): {save_path}")
+                        print(f"  총 {len(df)}개 데이터")
+                        if len(df) > 0:
+                            print(f"  기간: {df.index[0]} ~ {df.index[-1]}")
+                else:
+                    # 기존 파일이 없으면 새로 저장
+                    df.to_csv(save_path, index=True)
+                    print(f"기록 파일 저장 완료 (실시간 업데이트, 새 파일 생성): {save_path}")
+                    print(f"  총 {len(df)}개 데이터")
+                    if len(df) > 0:
+                        print(f"  기간: {df.index[0]} ~ {df.index[-1]}")
             else:
                 # 초기 다운로드: 날짜별 폴더에 시간별 파일로 저장
                 if len(df) > 0:
@@ -174,8 +272,37 @@ class DataManager:
                             filename = f"{name_without_ext}_{hour_str}.csv"
                             save_path = os.path.join(date_dir, filename)
                             
-                            # 시간별 파일로 저장
-                            hour_df.to_csv(save_path, index=True)
+                            # 기존 파일이 있으면 로드하여 병합
+                            if os.path.exists(save_path):
+                                try:
+                                    existing_df = pd.read_csv(save_path, index_col=0, parse_dates=True)
+                                    
+                                    # 인덱스를 datetime으로 변환
+                                    if not isinstance(existing_df.index, pd.DatetimeIndex):
+                                        existing_df.index = pd.to_datetime(existing_df.index)
+                                    
+                                    # 중복 제거 및 정렬
+                                    existing_df = existing_df[~existing_df.index.duplicated(keep='first')]
+                                    existing_df = existing_df.sort_index()
+                                    
+                                    # 기존 데이터와 새 데이터 병합
+                                    combined_df = pd.concat([existing_df, hour_df])
+                                    combined_df = combined_df[~combined_df.index.duplicated(keep='last')]  # 중복 시 새로운 데이터 우선
+                                    combined_df = combined_df.sort_index()
+                                    
+                                    # 병합된 데이터 저장
+                                    combined_df.to_csv(save_path, index=True)
+                                    print(f"  {filename}: 기존 {len(existing_df)}개 + 새 {len(hour_df)}개 = {len(combined_df)}개 (병합)")
+                                except Exception as e:
+                                    # 기존 파일 로드 실패 시 새 데이터만 저장
+                                    print(f"  경고: 기존 파일 로드 실패 ({filename}): {e}")
+                                    hour_df.to_csv(save_path, index=True)
+                                    print(f"  {filename}: 새 데이터 {len(hour_df)}개 저장")
+                            else:
+                                # 기존 파일이 없으면 새로 저장
+                                hour_df.to_csv(save_path, index=True)
+                                print(f"  {filename}: 새 데이터 {len(hour_df)}개 저장")
+                            
                             saved_files += 1
                     
                     print(f"기록 파일 저장 완료 (초기 다운로드, 시간별 분할): {saved_files}개 파일 생성")
@@ -210,9 +337,82 @@ class DataManager:
             print("err", err)
             raise
     
+    def _get_interval_timedelta(self, interval):
+        """
+        interval 문자열을 timedelta로 변환합니다.
+        
+        Parameters:
+        - interval (str): 캔들스틱 간격 (예: '3m', '24h')
+        
+        Returns:
+        - timedelta: interval에 해당하는 시간 간격
+        """
+        if interval.endswith('m'):
+            minutes = int(interval[:-1])
+            return timedelta(minutes=minutes)
+        elif interval.endswith('h'):
+            hours = int(interval[:-1])
+            if hours == 24:
+                return timedelta(days=1)
+            else:
+                return timedelta(hours=hours)
+        else:
+            raise ValueError(f"지원하지 않는 interval 형식: {interval}")
+    
+    def _check_missing_data_in_recent(self, df, interval, recent_count=3000):
+        """
+        최근 데이터 중 중간에 비어있는 데이터가 있는지 확인합니다.
+        
+        Parameters:
+        - df (pd.DataFrame): 전체 데이터프레임
+        - interval (str): 캔들스틱 간격
+        - recent_count (int): 확인할 최근 데이터 개수. 기본값 3000
+        
+        Returns:
+        - bool: 중간에 비어있는 데이터가 있으면 True, 없으면 False
+        """
+        try:
+            if df is None or len(df) < 2:
+                return False
+            
+            # 최근 recent_count개만 확인
+            if len(df) > recent_count:
+                recent_df = df.tail(recent_count).copy()
+            else:
+                recent_df = df.copy()
+            
+            if len(recent_df) < 2:
+                return False
+            
+            # interval에 따른 예상 시간 간격
+            interval_delta = self._get_interval_timedelta(interval)
+            
+            # 인덱스를 기준으로 시간 차이 계산
+            time_diffs = recent_df.index.to_series().diff().dropna()
+            
+            # 예상 간격의 1.5배 이상 차이나는 경우 누락으로 간주
+            # (예: 3분 간격인데 6분 이상 차이나면 누락)
+            threshold = interval_delta * 1.5
+            
+            missing_count = (time_diffs > threshold).sum()
+            
+            if missing_count > 0:
+                print(f"  최근 {len(recent_df)}개 데이터 중 {missing_count}개 구간에서 누락 감지")
+                print(f"  첫 번째 누락 구간: {time_diffs[time_diffs > threshold].iloc[0]}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            err = traceback.format_exc()
+            print(f"  경고: 최근 데이터 누락 확인 중 오류 발생: {err}")
+            # 오류 발생 시 안전하게 False 반환 (누락 확인 실패)
+            return False
+    
     def update_history_data(self, ticker='BTC', interval='24h', start_date='2014-01-01'):
         """
         기록 파일의 마지막 날짜부터 현재까지의 데이터를 다운로드하여 파일에 누적 저장합니다.
+        최근 3000개 데이터를 확인하여 중간에 비어있는 데이터가 있으면 전체를 다시 다운로드합니다.
         
         Parameters:
         - ticker (str): 암호화폐 티커. 기본값 'BTC'
@@ -242,6 +442,73 @@ class DataManager:
                 print(f"기존 기록 마지막 시간: {last_date.strftime('%Y-%m-%d %H:%M:%S')}")
                 print(f"현재 시간: {now.strftime('%Y-%m-%d %H:%M:%S')}")
                 
+                # 최근 3000개 데이터 확인
+                print("\n최근 3000개 데이터 누락 확인 중...")
+                has_missing = self._check_missing_data_in_recent(existing_df, interval, recent_count=3000)
+                
+                if has_missing:
+                    # 최근 3000개 데이터 범위 계산
+                    if len(existing_df) >= 3000:
+                        recent_start_date = existing_df.index[-3000]
+                    else:
+                        recent_start_date = existing_df.index[0]
+                    
+                    print(f"\n최근 3000개 데이터 중 누락 감지!")
+                    print(f"최근 3000개 범위: {recent_start_date.strftime('%Y-%m-%d %H:%M:%S')} ~ {last_date.strftime('%Y-%m-%d %H:%M:%S')}")
+                    print(f"최근 3000개 전체를 다시 다운로드하여 누락 부분을 채웁니다...")
+                    
+                    # 최근 3000개를 다시 다운로드
+                    # from_date=None으로 전체 데이터를 받은 후 최근 3000개만 선택
+                    # 또는 필요한 개수만 계산하여 받기
+                    all_recent_df = self.collector.make_history(
+                        ticker=ticker, 
+                        interval=interval, 
+                        collect_all_periods=True,
+                        from_date=None  # 전체 최신 데이터 받기
+                    )
+                    
+                    if all_recent_df is not None and len(all_recent_df) > 0:
+                        # 최근 3000개만 선택
+                        if len(all_recent_df) >= 3000:
+                            recent_df = all_recent_df.tail(3000).copy()
+                        else:
+                            recent_df = all_recent_df.copy()
+                        
+                        # recent_start_date 이후의 데이터만 사용 (기존 데이터와 겹치는 부분)
+                        recent_df = recent_df[recent_df.index >= recent_start_date]
+                        
+                        if len(recent_df) > 0:
+                            print(f"최근 3000개 재다운로드 완료: {len(recent_df)}개 데이터")
+                            print(f"  기간: {recent_df.index[0]} ~ {recent_df.index[-1]}")
+                            
+                            # 기존 데이터와 병합 (최근 부분은 재다운로드한 데이터로 교체)
+                            # 최근 부분 제거 후 재다운로드한 데이터 추가
+                            if len(existing_df) >= 3000:
+                                existing_df_before_recent = existing_df.iloc[:-3000].copy()
+                            else:
+                                # 전체 데이터가 3000개 미만이면 recent_start_date 이전 데이터만 유지
+                                existing_df_before_recent = existing_df[existing_df.index < recent_start_date].copy()
+                            
+                            # 재다운로드한 데이터와 기존 데이터를 병합
+                            combined_df = pd.concat([existing_df_before_recent, recent_df])
+                            combined_df = combined_df[~combined_df.index.duplicated(keep='last')]
+                            combined_df = combined_df.sort_index()
+                            
+                            # 재다운로드한 데이터를 파일에 저장 (날짜별/시간별로 나눠서 저장)
+                            print(f"\n재다운로드한 데이터 파일 저장 중...")
+                            self.save_history_to_file(recent_df, is_realtime_update=False)
+                            
+                            # 기존 데이터를 업데이트된 것으로 교체
+                            existing_df = combined_df
+                            last_date = existing_df.index[-1]
+                            print(f"누락 부분 채우기 완료. 업데이트된 마지막 시간: {last_date.strftime('%Y-%m-%d %H:%M:%S')}")
+                        else:
+                            print("  경고: 재다운로드한 데이터가 범위에 맞지 않습니다.")
+                    else:
+                        print("  경고: 최근 3000개 재다운로드 실패. 기존 데이터 유지.")
+                else:
+                    print("  최근 3000개 데이터에 누락 없음")
+                
                 # 마지막 캔들 시간이 현재 시간보다 최신이거나 같으면 업데이트 불필요
                 # (시분초까지 비교)
                 if last_date >= now:
@@ -249,7 +516,7 @@ class DataManager:
                     return existing_df
                 
                 # 마지막 캔들 이후부터 데이터 수집
-                print(f"누락된 시간부터 다운로드: {last_date.strftime('%Y-%m-%d %H:%M:%S')} ~ {now.strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"\n누락된 시간부터 다운로드: {last_date.strftime('%Y-%m-%d %H:%M:%S')} ~ {now.strftime('%Y-%m-%d %H:%M:%S')}")
                 
                 # 최신 데이터 다운로드 (API 제약으로 전체를 받지만, from_date로 즉시 필터링하여 필요한 부분만 사용)
                 print(f"\n최신 데이터 다운로드 중... (마지막 기록 이후만 사용)")
@@ -376,10 +643,11 @@ class DataManager:
             for trade in trades:
                 # 거래 날짜 형식 변환 (초 단위까지 포함)
                 if isinstance(trade['date'], pd.Timestamp):
-                    trade_date_str = trade['date'].strftime('%Y-%m-%d %H:%M:%S')
+                    trade_date_ts = trade['date']
+                    trade_date_str = trade_date_ts.strftime('%Y-%m-%d %H:%M:%S')
                 else:
-                    trade_date = pd.to_datetime(trade['date'])
-                    trade_date_str = trade_date.strftime('%Y-%m-%d %H:%M:%S')
+                    trade_date_ts = pd.to_datetime(trade['date'])
+                    trade_date_str = trade_date_ts.strftime('%Y-%m-%d %H:%M:%S')
                 
                 # 매수 날짜 형식 변환 (매도 거래인 경우) (초 단위까지 포함)
                 buy_date_str = None
@@ -390,9 +658,12 @@ class DataManager:
                         buy_date = pd.to_datetime(trade['buy_date'])
                         buy_date_str = buy_date.strftime('%Y-%m-%d %H:%M:%S')
                 
+                # execution_time은 캔들의 시간(trade_date)을 사용
+                execution_time_for_trade = trade_date_ts
+                
                 # 각 거래 행 데이터 생성
                 row = {
-                    'execution_time': execution_time.strftime('%Y-%m-%d %H:%M:%S'),
+                    'execution_time': execution_time_for_trade.strftime('%Y-%m-%d %H:%M:%S'),
                     'test_start_date': test_start_date_str,
                     'test_end_date': test_end_date_str,
                     'ticker': ticker,
@@ -468,75 +739,97 @@ class DataManager:
             # 새 행들을 DataFrame으로 생성
             new_df = pd.DataFrame(new_rows)
             
-            # 새로운 업데이트가 있는지 확인 (거래 기록이 있는 경우)
-            has_new_updates = len(new_rows) > 0 and any(
-                row.get('trade_date') is not None for row in new_rows
-            )
+            # 파일명에서 조건 문자열 추출
+            base_filename = os.path.basename(result_file)
+            name_without_ext = os.path.splitext(base_filename)[0]
             
-            # 실시간 업데이트이고 새로운 업데이트가 있는 경우: 날짜별 폴더에 시간별 파일로 저장
-            if has_new_updates:
-                # 날짜별 폴더 생성
+            # 거래 기록이 있는 경우: 거래 날짜별, 시간별로 분할 저장
+            if len(new_rows) > 0 and any(row.get('trade_date') is not None for row in new_rows):
+                # trade_date가 있는 행만 필터링
+                new_df_with_trades = new_df[new_df['trade_date'].notna()].copy()
+                
+                if len(new_df_with_trades) > 0:
+                    # trade_date를 datetime으로 변환
+                    new_df_with_trades['_temp_trade_date'] = pd.to_datetime(new_df_with_trades['trade_date'])
+                    new_df_with_trades['_temp_date'] = new_df_with_trades['_temp_trade_date'].dt.date
+                    new_df_with_trades['_temp_hour'] = new_df_with_trades['_temp_trade_date'].dt.hour
+                    
+                    saved_files = 0
+                    # 거래 날짜별로 그룹화
+                    for date, date_group in new_df_with_trades.groupby('_temp_date'):
+                        date_folder = pd.Timestamp(date).strftime('%Y-%m-%d')
+                        date_dir = os.path.join(self.data_dir, date_folder)
+                        
+                        # 날짜 폴더 생성
+                        if not os.path.exists(date_dir):
+                            os.makedirs(date_dir)
+                        
+                        # 해당 날짜의 데이터를 시간별로 그룹화
+                        for hour, hour_group in date_group.groupby('_temp_hour'):
+                            # 시간별 데이터프레임 (임시 컬럼 제거)
+                            hour_df = hour_group.drop(['_temp_trade_date', '_temp_date', '_temp_hour'], axis=1)
+                            
+                            # 시간별 파일명 생성 (YYYYMMDD_HH 형식)
+                            date_str = pd.Timestamp(date).strftime('%Y%m%d')
+                            hour_str = f"{date_str}_{hour:02d}"
+                            filename = f"{name_without_ext}_{hour_str}.csv"
+                            save_path = os.path.join(date_dir, filename)
+                            
+                            # 기존 파일이 있으면 로드하고 병합, 없으면 새로 생성
+                            if os.path.exists(save_path):
+                                try:
+                                    existing_df = pd.read_csv(save_path)
+                                    if len(existing_df) > 0:
+                                        # 기존 데이터와 병합 (중복 제거)
+                                        combined_df = pd.concat([existing_df, hour_df], ignore_index=True, sort=False)
+                                        # trade_date와 action을 기준으로 중복 제거 (execution_time은 이제 trade_date와 같음)
+                                        if 'trade_date' in combined_df.columns and 'action' in combined_df.columns:
+                                            combined_df = combined_df.drop_duplicates(subset=['trade_date', 'action'], keep='last')
+                                        elif 'trade_date' in combined_df.columns:
+                                            combined_df = combined_df.drop_duplicates(subset=['trade_date'], keep='last')
+                                        if 'trade_date' in combined_df.columns:
+                                            combined_df = combined_df.sort_values('trade_date')
+                                        else:
+                                            combined_df = combined_df.sort_values('execution_time')
+                                        combined_df.to_csv(save_path, index=False)
+                                    else:
+                                        hour_df.to_csv(save_path, index=False)
+                                except Exception as e:
+                                    # 파일 읽기 실패 시 새로 저장
+                                    hour_df.to_csv(save_path, index=False)
+                            else:
+                                hour_df.to_csv(save_path, index=False)
+                            
+                            saved_files += 1
+                    
+                    print(f"\n백테스트 결과 저장 완료 (날짜별/시간별 분할): {saved_files}개 파일 생성")
+                    print(f"  총 {len(new_df_with_trades)}개 거래 기록")
+                else:
+                    # 거래 기록이 없지만 실행 정보가 있는 경우: 실행 시간 기준으로 저장
+                    date_folder = execution_time.strftime('%Y-%m-%d')
+                    date_dir = os.path.join(self.data_dir, date_folder)
+                    if not os.path.exists(date_dir):
+                        os.makedirs(date_dir)
+                    
+                    hour_str = execution_time.strftime('%Y%m%d_%H')
+                    filename = f"{name_without_ext}_{hour_str}.csv"
+                    save_path = os.path.join(date_dir, filename)
+                    new_df.to_csv(save_path, index=False)
+                    print(f"\n백테스트 결과 저장 완료: {save_path}")
+                    print(f"  이번 실행: {len(new_rows)}개 기록 (거래 없음)")
+            else:
+                # 거래 기록이 없는 경우: 실행 시간 기준으로 저장
                 date_folder = execution_time.strftime('%Y-%m-%d')
                 date_dir = os.path.join(self.data_dir, date_folder)
                 if not os.path.exists(date_dir):
                     os.makedirs(date_dir)
                 
-                # 파일명에서 조건 문자열 추출
-                base_filename = os.path.basename(result_file)
-                # 확장자 제거
-                name_without_ext = os.path.splitext(base_filename)[0]
-                # 시간별 파일명 생성 (YYYYMMDD_HH 형식)
                 hour_str = execution_time.strftime('%Y%m%d_%H')
                 filename = f"{name_without_ext}_{hour_str}.csv"
                 save_path = os.path.join(date_dir, filename)
-                
-                # 새로운 데이터만 저장
                 new_df.to_csv(save_path, index=False)
-                print(f"\n백테스트 결과 저장 완료 (실시간 업데이트): {save_path}")
-                print(f"  이번 실행: {len(new_rows)}개 거래 기록")
-            else:
-                # 초기 다운로드 또는 업데이트 없음: 기존 방식으로 저장 (누적)
-                # 기존 파일이 있으면 로드, 없으면 새로 생성
-                if os.path.exists(result_file):
-                    try:
-                        # 파일 크기 확인 (빈 파일 체크)
-                        file_size = os.path.getsize(result_file)
-                        if file_size > 0:
-                            existing_df = pd.read_csv(result_file)
-                            # 빈 파일이거나 헤더만 있는 경우 처리
-                            if len(existing_df) > 0:
-                                print(f"  기존 거래 기록 {len(existing_df)}개 발견, 새 거래 기록 {len(new_rows)}개 추가 중...")
-                                # 기존 데이터프레임과 새 데이터프레임을 병합 (컬럼은 자동으로 맞춰짐)
-                                combined_df = pd.concat([existing_df, new_df], ignore_index=True, sort=False)
-                                # 컬럼 순서를 new_rows[0]의 키 순서로 정렬 (일관성 유지)
-                                column_order = list(new_rows[0].keys())
-                                # 기존에 있던 컬럼만 순서대로 정렬
-                                existing_columns = [col for col in column_order if col in combined_df.columns]
-                                additional_columns = [col for col in combined_df.columns if col not in column_order]
-                                combined_df = combined_df[existing_columns + additional_columns]
-                            else:
-                                # 헤더만 있는 경우
-                                print(f"  헤더만 있는 파일 발견, 새 거래 기록 {len(new_rows)}개 추가 중...")
-                                combined_df = new_df
-                        else:
-                            # 빈 파일인 경우
-                            print(f"  빈 파일 발견, 새 거래 기록 {len(new_rows)}개 생성 중...")
-                            combined_df = new_df
-                    except Exception as e:
-                        # 파일 읽기 실패 시 새로 생성
-                        err = traceback.format_exc()
-                        print(f"경고: 기존 파일 읽기 실패. 새로 생성합니다.")
-                        print(f"  오류: {err}")
-                        combined_df = new_df
-                else:
-                    print(f"  새 파일 생성 중... (거래 기록 {len(new_rows)}개)")
-                    combined_df = new_df
-                
-                # CSV 파일로 저장 (기존 파일 덮어쓰기)
-                combined_df.to_csv(result_file, index=False)
-                
-                print(f"\n백테스트 결과 저장 완료: {result_file}")
-                print(f"  총 {len(combined_df)}개 거래 기록 (이번 실행: {len(new_rows)}개 거래)")
+                print(f"\n백테스트 결과 저장 완료: {save_path}")
+                print(f"  이번 실행: {len(new_rows)}개 기록 (거래 없음)")
             
         except Exception as e:
             err = traceback.format_exc()
@@ -610,10 +903,11 @@ class DataManager:
             for trade in trades:
                 # 거래 날짜 형식 변환 (초 단위까지 포함)
                 if isinstance(trade['date'], pd.Timestamp):
-                    trade_date_str = trade['date'].strftime('%Y-%m-%d %H:%M:%S')
+                    trade_date_ts = trade['date']
+                    trade_date_str = trade_date_ts.strftime('%Y-%m-%d %H:%M:%S')
                 else:
-                    trade_date = pd.to_datetime(trade['date'])
-                    trade_date_str = trade_date.strftime('%Y-%m-%d %H:%M:%S')
+                    trade_date_ts = pd.to_datetime(trade['date'])
+                    trade_date_str = trade_date_ts.strftime('%Y-%m-%d %H:%M:%S')
                 
                 # 매수 날짜 형식 변환 (매도 거래인 경우) (초 단위까지 포함)
                 buy_date_str = None
@@ -624,9 +918,13 @@ class DataManager:
                         buy_date = pd.to_datetime(trade['buy_date'])
                         buy_date_str = buy_date.strftime('%Y-%m-%d %H:%M:%S')
                 
+                # execution_time은 실제 백테스트 실행 시간을 사용 (각 실행별로 구분)
+                # 이렇게 하면 같은 거래라도 실행 시점별로 구분되어 누적 저장됨
+                execution_time_for_trade = execution_time
+                
                 # 각 거래 행 데이터 생성
                 row = {
-                    'execution_time': execution_time.strftime('%Y-%m-%d %H:%M:%S'),
+                    'execution_time': execution_time_for_trade.strftime('%Y-%m-%d %H:%M:%S'),
                     'test_start_date': test_start_date_str,
                     'test_end_date': test_end_date_str,
                     'ticker': ticker,
@@ -706,75 +1004,102 @@ class DataManager:
             # 새 행들을 DataFrame으로 생성
             new_df = pd.DataFrame(new_rows)
             
-            # 새로운 업데이트가 있는지 확인 (거래 기록이 있는 경우)
-            has_new_updates = len(new_rows) > 0 and any(
-                row.get('trade_date') is not None for row in new_rows
-            )
+            # 파일명에서 조건 문자열 추출
+            base_filename = os.path.basename(result_file)
+            name_without_ext = os.path.splitext(base_filename)[0]
             
-            # 실시간 업데이트이고 새로운 업데이트가 있는 경우: 날짜별 폴더에 시간별 파일로 저장
-            if has_new_updates:
-                # 날짜별 폴더 생성
+            # 거래 기록이 있는 경우: 거래 날짜별, 시간별로 분할 저장
+            if len(new_rows) > 0 and any(row.get('trade_date') is not None for row in new_rows):
+                # trade_date가 있는 행만 필터링
+                new_df_with_trades = new_df[new_df['trade_date'].notna()].copy()
+                
+                if len(new_df_with_trades) > 0:
+                    # trade_date를 datetime으로 변환
+                    new_df_with_trades['_temp_trade_date'] = pd.to_datetime(new_df_with_trades['trade_date'])
+                    new_df_with_trades['_temp_date'] = new_df_with_trades['_temp_trade_date'].dt.date
+                    new_df_with_trades['_temp_hour'] = new_df_with_trades['_temp_trade_date'].dt.hour
+                    
+                    saved_files = 0
+                    # 거래 날짜별로 그룹화
+                    for date, date_group in new_df_with_trades.groupby('_temp_date'):
+                        date_folder = pd.Timestamp(date).strftime('%Y-%m-%d')
+                        date_dir = os.path.join(self.data_dir, date_folder)
+                        
+                        # 날짜 폴더 생성
+                        if not os.path.exists(date_dir):
+                            os.makedirs(date_dir)
+                        
+                        # 해당 날짜의 데이터를 시간별로 그룹화
+                        for hour, hour_group in date_group.groupby('_temp_hour'):
+                            # 시간별 데이터프레임 (임시 컬럼 제거)
+                            hour_df = hour_group.drop(['_temp_trade_date', '_temp_date', '_temp_hour'], axis=1)
+                            
+                            # 시간별 파일명 생성 (YYYYMMDD_HH 형식)
+                            date_str = pd.Timestamp(date).strftime('%Y%m%d')
+                            hour_str = f"{date_str}_{hour:02d}"
+                            filename = f"{name_without_ext}_{hour_str}.csv"
+                            save_path = os.path.join(date_dir, filename)
+                            
+                            # 기존 파일이 있으면 로드하고 병합, 없으면 새로 생성
+                            if os.path.exists(save_path):
+                                try:
+                                    existing_df = pd.read_csv(save_path)
+                                    if len(existing_df) > 0:
+                                        # 기존 데이터와 병합 (중복 제거)
+                                        combined_df = pd.concat([existing_df, hour_df], ignore_index=True, sort=False)
+                                        # execution_time, trade_date, action을 기준으로 중복 제거
+                                        # 이렇게 하면 같은 실행의 같은 거래만 중복 제거되고, 다른 실행의 같은 거래는 누적됨
+                                        if 'execution_time' in combined_df.columns and 'trade_date' in combined_df.columns and 'action' in combined_df.columns:
+                                            combined_df = combined_df.drop_duplicates(subset=['execution_time', 'trade_date', 'action'], keep='last')
+                                        elif 'execution_time' in combined_df.columns and 'trade_date' in combined_df.columns:
+                                            combined_df = combined_df.drop_duplicates(subset=['execution_time', 'trade_date'], keep='last')
+                                        elif 'trade_date' in combined_df.columns and 'action' in combined_df.columns:
+                                            combined_df = combined_df.drop_duplicates(subset=['trade_date', 'action'], keep='last')
+                                        elif 'trade_date' in combined_df.columns:
+                                            combined_df = combined_df.drop_duplicates(subset=['trade_date'], keep='last')
+                                        if 'trade_date' in combined_df.columns:
+                                            combined_df = combined_df.sort_values('trade_date')
+                                        else:
+                                            combined_df = combined_df.sort_values('execution_time')
+                                        combined_df.to_csv(save_path, index=False)
+                                    else:
+                                        hour_df.to_csv(save_path, index=False)
+                                except Exception as e:
+                                    # 파일 읽기 실패 시 새로 저장
+                                    hour_df.to_csv(save_path, index=False)
+                            else:
+                                hour_df.to_csv(save_path, index=False)
+                            
+                            saved_files += 1
+                    
+                    print(f"\n백테스트 결과 저장 완료 (날짜별/시간별 분할): {saved_files}개 파일 생성")
+                    print(f"  총 {len(new_df_with_trades)}개 거래 기록")
+                else:
+                    # 거래 기록이 없지만 실행 정보가 있는 경우: 실행 시간 기준으로 저장
+                    date_folder = execution_time.strftime('%Y-%m-%d')
+                    date_dir = os.path.join(self.data_dir, date_folder)
+                    if not os.path.exists(date_dir):
+                        os.makedirs(date_dir)
+                    
+                    hour_str = execution_time.strftime('%Y%m%d_%H')
+                    filename = f"{name_without_ext}_{hour_str}.csv"
+                    save_path = os.path.join(date_dir, filename)
+                    new_df.to_csv(save_path, index=False)
+                    print(f"\n백테스트 결과 저장 완료: {save_path}")
+                    print(f"  이번 실행: {len(new_rows)}개 기록 (거래 없음)")
+            else:
+                # 거래 기록이 없는 경우: 실행 시간 기준으로 저장
                 date_folder = execution_time.strftime('%Y-%m-%d')
                 date_dir = os.path.join(self.data_dir, date_folder)
                 if not os.path.exists(date_dir):
                     os.makedirs(date_dir)
                 
-                # 파일명에서 조건 문자열 추출
-                base_filename = os.path.basename(result_file)
-                # 확장자 제거
-                name_without_ext = os.path.splitext(base_filename)[0]
-                # 시간별 파일명 생성 (YYYYMMDD_HH 형식)
                 hour_str = execution_time.strftime('%Y%m%d_%H')
                 filename = f"{name_without_ext}_{hour_str}.csv"
                 save_path = os.path.join(date_dir, filename)
-                
-                # 새로운 데이터만 저장
                 new_df.to_csv(save_path, index=False)
-                print(f"\n백테스트 결과 저장 완료 (실시간 업데이트): {save_path}")
-                print(f"  이번 실행: {len(new_rows)}개 거래 기록")
-            else:
-                # 초기 다운로드 또는 업데이트 없음: 기존 방식으로 저장 (누적)
-                # 기존 파일이 있으면 로드, 없으면 새로 생성
-                if os.path.exists(result_file):
-                    try:
-                        # 파일 크기 확인 (빈 파일 체크)
-                        file_size = os.path.getsize(result_file)
-                        if file_size > 0:
-                            existing_df = pd.read_csv(result_file)
-                            # 빈 파일이거나 헤더만 있는 경우 처리
-                            if len(existing_df) > 0:
-                                print(f"  기존 거래 기록 {len(existing_df)}개 발견, 새 거래 기록 {len(new_rows)}개 추가 중...")
-                                # 기존 데이터프레임과 새 데이터프레임을 병합 (컬럼은 자동으로 맞춰짐)
-                                combined_df = pd.concat([existing_df, new_df], ignore_index=True, sort=False)
-                                # 컬럼 순서를 new_rows[0]의 키 순서로 정렬 (일관성 유지)
-                                column_order = list(new_rows[0].keys())
-                                # 기존에 있던 컬럼만 순서대로 정렬
-                                existing_columns = [col for col in column_order if col in combined_df.columns]
-                                additional_columns = [col for col in combined_df.columns if col not in column_order]
-                                combined_df = combined_df[existing_columns + additional_columns]
-                            else:
-                                # 헤더만 있는 경우
-                                print(f"  헤더만 있는 파일 발견, 새 거래 기록 {len(new_rows)}개 추가 중...")
-                                combined_df = new_df
-                        else:
-                            # 빈 파일인 경우
-                            print(f"  빈 파일 발견, 새 거래 기록 {len(new_rows)}개 생성 중...")
-                            combined_df = new_df
-                    except Exception as e:
-                        # 파일 읽기 실패 시 새로 생성
-                        err = traceback.format_exc()
-                        print(f"경고: 기존 파일 읽기 실패. 새로 생성합니다.")
-                        print(f"  오류: {err}")
-                        combined_df = new_df
-                else:
-                    print(f"  새 파일 생성 중... (거래 기록 {len(new_rows)}개)")
-                    combined_df = new_df
-                
-                # CSV 파일로 저장 (기존 파일 덮어쓰기)
-                combined_df.to_csv(result_file, index=False)
-                
-                print(f"\n백테스트 결과 저장 완료: {result_file}")
-                print(f"  총 {len(combined_df)}개 거래 기록 (이번 실행: {len(new_rows)}개 거래)")
+                print(f"\n백테스트 결과 저장 완료: {save_path}")
+                print(f"  이번 실행: {len(new_rows)}개 기록 (거래 없음)")
             
         except Exception as e:
             err = traceback.format_exc()

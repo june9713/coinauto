@@ -47,14 +47,38 @@ class QQCTestEngine:
         self._holding = False
         self._buy_price = 0.0
         self._buy_date = None
-        self._buy_candle_index = None  # 매수한 캔들의 인덱스 (n 캔들)
+        self._buy_candle_index = None  # 매수한 캔들의 인덱스 (n+1 캔들, 매수 실행 캔들)
+        self._buy_condition_candle_index = None  # 조건 확인한 캔들의 인덱스 (n 캔들, 보유 기간 계산 기준)
+        self._buy_condition_date = None  # 조건 확인한 캔들의 날짜 (n 캔들, 보유 기간 계산 기준 - 절대값)
+        self._buy_execution_date = None  # 매수 실행한 캔들의 날짜 (n+1 캔들, 절대값)
+        self._buy_condition_absolute_index = None  # 조건 확인한 캔들의 절대 인덱스 (n 캔들, df 내 절대 위치)
         
         # 캔들 버퍼 (실시간 처리용)
-        # 최신 캔들을 포함하여 최대 56개까지 저장 (55개 평균 계산 + 최신 1개)
+        # 최신 캔들을 포함하여 최대 volume_window+1개까지 저장 (volume_window개 평균 계산용 + 현재 캔들)
         self._candle_buffer = []
         
-        # 매수 대기 플래그 (이전 캔들에서 조건 만족 시 다음 캔들의 오픈가로 매수)
+        # 매수 대기 플래그 (현재 캔들에서 조건 만족 시 다음 캔들의 오픈가로 매수)
         self._pending_buy = False
+        self._pending_buy_condition_candle_index = None
+        self._pending_buy_absolute_index = None  # 조건 확인한 캔들의 인덱스
+        self._pending_buy_absolute_index = None  # 조건 확인한 캔들의 절대 인덱스
+        
+        # 디버깅 통계 (run 메서드에서 사용)
+        self._condition_check_count = 0
+        self._condition_b_satisfied = 0
+        self._condition_d_satisfied = 0
+        self._condition_e_satisfied = 0
+        self._all_conditions_satisfied = 0
+        
+        # 전체 조건 B, D, E 통계 (보유 여부와 관계없이 모든 캔들에 대해 수집, 그래프와 동일)
+        self._condition_b_all_check_count = 0
+        self._condition_b_all_satisfied = 0
+        self._condition_d_all_satisfied = 0
+        self._condition_e_all_satisfied = 0
+        self._condition_bde_all_satisfied = 0
+        self._condition_d_all_satisfied = 0
+        self._condition_e_all_satisfied = 0
+        self._condition_bde_all_satisfied = 0
         
     def reset(self):
         """상태 초기화"""
@@ -65,8 +89,24 @@ class QQCTestEngine:
         self._buy_price = 0.0
         self._buy_date = None
         self._buy_candle_index = None
+        self._buy_condition_candle_index = None
+        self._buy_condition_date = None
+        self._buy_execution_date = None
+        self._buy_condition_absolute_index = None
         self._candle_buffer = []
         self._pending_buy = False
+        self._pending_buy_condition_candle_index = None
+        self._pending_buy_absolute_index = None
+        self._condition_check_count = 0
+        self._condition_b_satisfied = 0
+        self._condition_d_satisfied = 0
+        self._condition_e_satisfied = 0
+        self._all_conditions_satisfied = 0
+        self._condition_b_all_check_count = 0
+        self._condition_b_all_satisfied = 0
+        self._condition_d_all_satisfied = 0
+        self._condition_e_all_satisfied = 0
+        self._condition_bde_all_satisfied = 0
     
     def add_candle(self, candle_data):
         """
@@ -117,7 +157,7 @@ class QQCTestEngine:
             
             self._candle_buffer.append(candle)
             
-            # 버퍼 크기 제한 (최신 volume_window+1개만 유지: volume_window개 평균 계산용 + 최신 1개)
+            # 버퍼 크기 제한 (최신 volume_window+1개만 유지: volume_window개 평균 계산용 + 현재 캔들)
             buffer_limit = self.volume_window + 1
             if len(self._candle_buffer) > buffer_limit:
                 self._candle_buffer.pop(0)
@@ -127,20 +167,27 @@ class QQCTestEngine:
             
             # 매수 대기 중이면 현재 캔들의 오픈가+1000원으로 매수
             if self._pending_buy and not self._holding:
-                result = self._execute_buy_at_open(candle, current_candle_index)
+                result = self._execute_buy_at_open(candle, current_candle_index, self._pending_buy_condition_date, self._pending_buy_absolute_index)
                 self._pending_buy = False
+                self._pending_buy_condition_candle_index = None
+                self._pending_buy_condition_date = None
+                self._pending_buy_absolute_index = None
                 if result:
                     return result
             
+            # 보유 여부와 관계없이 모든 캔들에 대해 조건 B, D, E 통계 수집 (디버깅용, 그래프와 동일)
+            self._update_all_conditions_statistics(candle, current_candle_index)
+            
             # 보유 중인 경우 매도 조건 확인
             if self._holding:
-                result = self._check_sell_conditions(candle, current_candle_index)
+                result = self._check_sell_conditions(candle, current_candle_index, getattr(self, '_current_absolute_index', None))
                 if result:
                     return result
                 
                 # 매도하지 않은 경우 자산 평가만 업데이트
                 coin_value = self._coin_amount * close_price
                 self._total_asset = self._cash + coin_value
+                # 보유 중일 때는 매수 조건 확인하지 않음 (기존 로직 유지)
                 return {
                     'trade': None,
                     'asset_history': {
@@ -175,6 +222,82 @@ class QQCTestEngine:
             print("err", err)
             raise
     
+    def _update_all_conditions_statistics(self, candle, current_candle_index):
+        """
+        조건 B, D, E 통계 업데이트 (보유 여부와 관계없이 모든 캔들에 대해 확인, 그래프와 동일한 로직)
+        
+        Parameters:
+        - candle (dict): 현재 캔들 데이터
+        - current_candle_index (int): 현재 캔들 인덱스
+        """
+        try:
+            # 최소 데이터가 필요함
+            if len(self._candle_buffer) < 2:
+                return
+            
+            # 버퍼 내에서 조건을 확인할 수 있는 범위인지 체크
+            if current_candle_index < 1:
+                return
+            
+            # 조건 B: 거래량 평균 계산 (그래프와 동일한 로직)
+            if current_candle_index < self.volume_window:
+                # 초기 구간: 현재까지의 모든 데이터로 평균 계산
+                if current_candle_index == 0:
+                    volume_avg = 0.0
+                else:
+                    volumes = [self._candle_buffer[i]['volume'] for i in range(0, current_candle_index)]
+                    volume_avg = sum(volumes) / len(volumes) if len(volumes) > 0 else 0.0
+            else:
+                # 정상 구간: volume_window개 데이터로 평균 계산
+                volume_window_start = current_candle_index - self.volume_window
+                volume_window_end = current_candle_index - 1
+                volumes = [self._candle_buffer[i]['volume'] for i in range(volume_window_start, volume_window_end + 1)]
+                volume_avg = sum(volumes) / len(volumes) if len(volumes) > 0 else 0.0
+            
+            # 조건 B 확인
+            condition_b = False
+            if volume_avg > 0:
+                self._condition_b_all_check_count += 1
+                condition_b = candle['volume'] >= (volume_avg * self.volume_multiplier)
+                if condition_b:
+                    self._condition_b_all_satisfied += 1
+            
+            # 조건 D: 이동평균 계산 (그래프와 동일한 로직)
+            condition_d = False
+            if current_candle_index < self.ma_window:
+                # 초기 구간: 현재까지의 모든 데이터로 평균 계산
+                if current_candle_index == 0:
+                    ma_c = candle['close']
+                else:
+                    closes = [self._candle_buffer[i]['close'] for i in range(0, current_candle_index)]
+                    ma_c = sum(closes) / len(closes) if len(closes) > 0 else candle['close']
+                # 조건 D: 현재 종가 > 이동평균
+                condition_d = candle['close'] > ma_c
+            else:
+                # 정상 구간: ma_window개 데이터로 평균 계산
+                ma_window_start = current_candle_index - self.ma_window
+                ma_window_end = current_candle_index - 1
+                closes = [self._candle_buffer[i]['close'] for i in range(ma_window_start, ma_window_end + 1)]
+                ma_c = sum(closes) / len(closes) if len(closes) > 0 else candle['close']
+                # 조건 D: 현재 종가 > 이동평균
+                condition_d = candle['close'] > ma_c
+            
+            if condition_d:
+                self._condition_d_all_satisfied += 1
+            
+            # 조건 E: 양봉 (오픈가 < 종가)
+            condition_e = candle['open'] < candle['close']
+            if condition_e:
+                self._condition_e_all_satisfied += 1
+            
+            # B, D, E 모두 만족
+            if condition_b and condition_d and condition_e:
+                self._condition_bde_all_satisfied += 1
+                
+        except Exception as e:
+            # 통계 수집 실패는 무시 (디버깅용이므로)
+            pass
+    
     def _check_buy_conditions(self, candle, current_candle_index):
         """
         매수 조건 확인
@@ -187,50 +310,58 @@ class QQCTestEngine:
         - dict or None: 매수 시 거래 정보와 자산 기록, 매수하지 않으면 None
         """
         try:
-            # 최소 volume_window+1개 캔들이 필요 (volume_window개 평균 계산 + 최신 1개)
+            # 최소 volume_window+1개 캔들이 필요 (volume_window개 평균 계산용 + 현재 캔들)
             min_buffer_size = self.volume_window + 1
             if len(self._candle_buffer) < min_buffer_size:
                 return None
             
-            # 이전 캔들 (현재 캔들 이전)로 조건 확인
-            # 조건 확인은 이전 캔들(i-1)로 하고, 매수는 현재 캔들(i)의 오픈가로 함
-            if current_candle_index == 0:
+            # 현재 캔들로 조건 확인
+            # 조건 확인은 현재 캔들(i)로 하고, 매수는 다음 캔들(i+1)의 오픈가로 함
+            if current_candle_index < self.volume_window:
                 return None
             
-            prev_candle_index = current_candle_index - 1
-            prev_candle = self._candle_buffer[prev_candle_index]
-            
-            # 거래량 A 계산: 이전 캔들 제외한 그 이전 volume_window개 캔들의 거래량 평균
-            if prev_candle_index < self.volume_window:
-                return None
-            
-            volume_window_start = prev_candle_index - self.volume_window
-            volume_window_end = prev_candle_index - 1
+            # 거래량 A 계산: 현재 캔들을 제외한 최신 volume_window개 캔들의 거래량 평균
+            volume_window_start = current_candle_index - self.volume_window
+            volume_window_end = current_candle_index - 1
             volumes = [self._candle_buffer[i]['volume'] for i in range(volume_window_start, volume_window_end + 1)]
             volume_a = sum(volumes) / len(volumes) if len(volumes) > 0 else 0.0
             
-            # 조건 B: 이전 캔들의 거래량이 거래량 A의 1.4배 이상
-            condition_b = prev_candle['volume'] >= (volume_a * self.volume_multiplier)
+            # 조건 B: 현재 캔들의 거래량이 거래량 A의 1.4배 이상
+            condition_b = candle['volume'] >= (volume_a * self.volume_multiplier)
             
-            # 이동평균 C 계산: 이전 캔들 제외한 그 이전 ma_window개 캔들의 종가 이동평균
-            if prev_candle_index < self.ma_window:
+            # 이동평균 C 계산: 현재 캔들을 제외한 최신 ma_window개 캔들의 종가 이동평균
+            if current_candle_index < self.ma_window:
                 return None
             
-            ma_window_start = prev_candle_index - self.ma_window
-            ma_window_end = prev_candle_index - 1
+            ma_window_start = current_candle_index - self.ma_window
+            ma_window_end = current_candle_index - 1
             closes = [self._candle_buffer[i]['close'] for i in range(ma_window_start, ma_window_end + 1)]
             ma_c = sum(closes) / len(closes) if len(closes) > 0 else 0.0
             
-            # 조건 D: 이전 캔들의 종가가 이동평균 C보다 큼
-            condition_d = prev_candle['close'] > ma_c
+            # 조건 D: 현재 캔들의 종가가 이동평균 C보다 큼
+            condition_d = candle['close'] > ma_c
             
-            # 조건 E: 이전 캔들이 양봉 (오픈가 < 종가)
-            condition_e = prev_candle['open'] < prev_candle['close']
+            # 조건 E: 현재 캔들이 양봉 (오픈가 < 종가)
+            condition_e = candle['open'] < candle['close']
+            
+            # 디버깅: 조건 확인 통계 업데이트
+            self._condition_check_count += 1
+            if condition_b:
+                self._condition_b_satisfied += 1
+            if condition_d:
+                self._condition_d_satisfied += 1
+            if condition_e:
+                self._condition_e_satisfied += 1
+            if condition_b and condition_d and condition_e:
+                self._all_conditions_satisfied += 1
             
             # B, D, E 모두 만족하면 다음 캔들의 오픈가+1000원으로 매수
             if condition_b and condition_d and condition_e:
                 # 다음 캔들 추가 시 매수하도록 플래그 설정
                 self._pending_buy = True
+                self._pending_buy_condition_candle_index = current_candle_index  # 조건 확인한 캔들 인덱스 저장 (버퍼 내 상대값)
+                self._pending_buy_condition_date = candle['date']  # 조건 확인한 캔들 날짜 저장 (절대값)
+                self._pending_buy_absolute_index = getattr(self, '_current_absolute_index', None)  # 조건 확인한 캔들의 절대 인덱스
                 # 현재는 거래 없이 자산 평가만 업데이트
                 return None
             
@@ -241,13 +372,15 @@ class QQCTestEngine:
             print("err", err)
             raise
     
-    def _execute_buy_at_open(self, candle, current_candle_index):
+    def _execute_buy_at_open(self, candle, current_candle_index, condition_date, condition_absolute_index):
         """
         매수 실행 (다음 캔들의 오픈가+1000원)
         
         Parameters:
         - candle (dict): 현재 캔들 데이터 (매수 실행할 캔들)
-        - current_candle_index (int): 현재 캔들 인덱스
+        - current_candle_index (int): 현재 캔들 인덱스 (버퍼 내 상대값)
+        - condition_date: 조건 확인한 캔들의 날짜 (n 캔들, 절대값)
+        - condition_absolute_index: 조건 확인한 캔들의 절대 인덱스 (n 캔들, df 내 절대 위치)
         
         Returns:
         - dict: 거래 정보와 자산 기록
@@ -266,13 +399,17 @@ class QQCTestEngine:
             self._holding = True
             self._buy_price = buy_price
             self._buy_date = candle['date']
-            self._buy_candle_index = current_candle_index
+            self._buy_candle_index = current_candle_index  # 매수 실행한 캔들 인덱스 (n+1, 버퍼 내 상대값)
+            self._buy_condition_candle_index = self._pending_buy_condition_candle_index  # 조건 확인한 캔들 인덱스 (n, 버퍼 내 상대값)
+            self._buy_condition_date = condition_date  # 조건 확인한 캔들 날짜 (n, 절대값)
+            self._buy_execution_date = candle['date']  # 매수 실행한 캔들 날짜 (n+1, 절대값)
+            self._buy_condition_absolute_index = condition_absolute_index  # 조건 확인한 캔들의 절대 인덱스 (n, df 내 절대 위치)
             
             # 자산 평가 업데이트
             coin_value = self._coin_amount * candle['close']
             self._total_asset = self._cash + coin_value
             
-            # 거래량 A와 이동평균 C 계산 (이전 캔들 기준)
+            # 거래량 A와 이동평균 C 계산 (매수 조건을 확인했던 캔들 기준)
             # 매수 조건은 이전 캔들에서 확인했으므로, 이전 캔들의 인덱스 사용
             prev_candle_index = current_candle_index - 1
             if prev_candle_index >= self.volume_window:
@@ -314,23 +451,27 @@ class QQCTestEngine:
             print("err", err)
             raise
     
-    def _check_sell_conditions(self, candle, current_candle_index):
+    def _check_sell_conditions(self, candle, current_candle_index, current_absolute_index):
         """
         매도 조건 확인
         
         Parameters:
         - candle (dict): 현재 캔들 데이터
-        - current_candle_index (int): 현재 캔들 인덱스
+        - current_candle_index (int): 현재 캔들 인덱스 (버퍼 내 상대값)
+        - current_absolute_index (int): 현재 캔들 절대 인덱스 (df 내 절대 위치)
         
         Returns:
         - dict or None: 매도 시 거래 정보와 자산 기록, 매도하지 않으면 None
         """
         try:
-            if not self._holding or self._buy_candle_index is None:
+            if not self._holding or self._buy_condition_absolute_index is None:
                 return None
             
             # 현재 수익률 계산
             current_return = ((candle['close'] - self._buy_price) / self._buy_price) * 100
+            
+            # 조건 확인한 캔들(n) 기준으로 보유 기간 계산 (절대 인덱스 사용)
+            candles_passed = current_absolute_index - self._buy_condition_absolute_index
             
             # 조건 1: n+15 캔들이 되기 전에 수익률 17.6%면 매도
             if current_return >= self.profit_target:
@@ -340,8 +481,7 @@ class QQCTestEngine:
             if current_return <= self.stop_loss:
                 return self._execute_sell(candle, current_candle_index, 'SELL (손절)')
             
-            # 조건 3: n+15 캔들이 되면 무조건 매도
-            candles_passed = current_candle_index - self._buy_candle_index
+            # 조건 3: n+15 캔들이 되면 무조건 매도 (조건 확인한 캔들 n 기준으로 15개 캔들 경과)
             if candles_passed >= self.hold_period:
                 # n+15 캔들의 오픈가에서 매도
                 sell_price = candle['open']
@@ -409,6 +549,9 @@ class QQCTestEngine:
             self._buy_price = 0.0
             self._buy_date = None
             self._buy_candle_index = None
+            self._buy_condition_candle_index = None
+            self._buy_condition_date = None
+            self._buy_execution_date = None
             
             self._total_asset = self._cash
             
@@ -448,6 +591,15 @@ class QQCTestEngine:
             trades = []
             asset_history = []
             
+            # 디버깅: 매수 조건 확인 통계 초기화
+            self._condition_check_count = 0
+            self._condition_b_satisfied = 0
+            self._condition_d_satisfied = 0
+            self._condition_e_satisfied = 0
+            self._all_conditions_satisfied = 0
+            self._condition_b_all_check_count = 0
+            self._condition_b_all_satisfied = 0
+            
             # 각 캔들을 하나씩 처리
             for idx in range(len(df)):
                 candle_row = df.iloc[idx]
@@ -462,6 +614,9 @@ class QQCTestEngine:
                     'volume': candle_row['volume']
                 }
                 
+                # 절대 인덱스 저장 (보유 기간 계산용)
+                self._current_absolute_index = idx
+                
                 # 캔들 추가 및 처리
                 result = self.add_candle(candle_data)
                 
@@ -473,6 +628,22 @@ class QQCTestEngine:
             
             # 최종 수익률 계산
             final_return = ((self._total_asset - self.initial_capital) / self.initial_capital) * 100
+            
+            # 디버깅 정보 출력
+            print(f"\n[디버깅] 매수 조건 확인 통계:")
+            print(f"  총 캔들 수: {len(df)}개")
+            print(f"  매수 조건 확인 가능한 캔들: {self._condition_check_count}개 (최소 {self.volume_window + 1}개 필요, 보유하지 않은 경우만)")
+            if self._condition_check_count > 0:
+                print(f"  조건 B 만족 (거래량 >= 평균 * {self.volume_multiplier}): {self._condition_b_satisfied}회 (백테스트 조건 확인 가능 범위 내, 보유하지 않은 경우만)")
+                print(f"  조건 D 만족 (종가 > 이동평균): {self._condition_d_satisfied}회")
+                print(f"  조건 E 만족 (양봉): {self._condition_e_satisfied}회")
+                print(f"  모든 조건 만족 (B & D & E): {self._all_conditions_satisfied}회")
+            print(f"  조건 B 확인 가능한 캔들 (모든 상태): {self._condition_b_all_check_count}개")
+            print(f"  조건 B 만족 (거래량 >= 평균 * {self.volume_multiplier}): {self._condition_b_all_satisfied}회 (모든 캔들 기준, 그래프와 동일)")
+            print(f"  조건 D 만족 (종가 > 이동평균): {self._condition_d_all_satisfied}회 (모든 캔들 기준, 그래프와 동일)")
+            print(f"  조건 E 만족 (양봉): {self._condition_e_all_satisfied}회 (모든 캔들 기준, 그래프와 동일)")
+            print(f"  모든 조건 만족 (B & D & E): {self._condition_bde_all_satisfied}회 (모든 캔들 기준, 그래프와 동일)")
+            print(f"  실제 매수 발생: {len(trades)}회")
             
             # 마지막 거래 상태
             if self._holding:

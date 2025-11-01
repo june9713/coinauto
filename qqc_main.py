@@ -2,7 +2,11 @@
 QQC 백테스트 메인 실행 모듈
 qqc_test 모듈을 호출하여 백테스트 실행
 """
+from ast import Or
 import traceback
+import time
+import datetime
+from datetime import timedelta
 import pandas as pd
 from config import Config
 from data_manager import DataManager
@@ -111,15 +115,24 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         # 조건 기반 DataManager 초기화
         data_manager = DataManager(ticker=ticker, condition_dict=current_condition)
         
-        # start_date가 None인 경우 데이터에서 첫 번째 날짜 확인
+        # start_date가 None인 경우 저장된 데이터에서 첫 번째 날짜 확인
         if start_dt is None:
             print("\n데이터에서 첫 번째 날짜 확인 중...")
-            df = data_manager.update_history_data(ticker=ticker, interval=interval, start_date='2014-01-01')
-            if df is None or len(df) == 0:
-                print("오류: 데이터 수집 실패")
-                return
-            start_dt = df.index[0]
-            print(f"데이터의 첫 번째 날짜를 시작 날짜로 사용: {start_dt.strftime('%Y-%m-%d')}")
+            # 먼저 저장된 데이터 확인 (전체 다운로드 없이)
+            existing_df = data_manager.load_history_from_file()
+            if existing_df is not None and len(existing_df) > 0:
+                # 저장된 데이터가 있으면 첫 번째 날짜를 시작 날짜로 사용
+                start_dt = existing_df.index[0]
+                print(f"저장된 데이터에서 첫 번째 날짜 확인: {start_dt.strftime('%Y-%m-%d')}")
+            else:
+                # 저장된 데이터가 없으면 전체 데이터 다운로드하여 첫 번째 날짜 확인
+                print("저장된 데이터가 없습니다. 전체 데이터 다운로드를 시작합니다...")
+                df = data_manager.update_history_data(ticker=ticker, interval=interval, start_date='2014-01-01')
+                if df is None or len(df) == 0:
+                    print("오류: 데이터 수집 실패")
+                    return
+                start_dt = df.index[0]
+                print(f"데이터의 첫 번째 날짜를 시작 날짜로 사용: {start_dt.strftime('%Y-%m-%d')}")
         
         # 날짜 범위 검증
         if end_dt is not None and end_dt <= start_dt:
@@ -132,8 +145,10 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         else:
             print(" ~ (마지막)")
         
-        # 데이터 업데이트
+        # 데이터 업데이트 (저장된 데이터가 있으면 마지막 날짜 이후부터만 조회)
         print("\n[단계 1] 데이터 수집 중...")
+        # update_history_data가 저장된 데이터가 있으면 마지막 날짜 이후부터만 조회하고,
+        # 저장된 데이터가 없으면 start_date부터 전체 다운로드합니다.
         df = data_manager.update_history_data(ticker=ticker, interval=interval, start_date='2014-01-01')
         
         if df is None or len(df) == 0:
@@ -142,6 +157,9 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         
         print(f"수집 완료: {len(df)}개 데이터")
         print(f"전체 기간: {df.index[0]} ~ {df.index[-1]}")
+        
+        # 원본 데이터 보관 (기간별 그래프 생성을 위해)
+        original_df_for_backtest = df.copy()
         
         # 필터링 (시작 날짜 및 종료 날짜)
         original_count = len(df)
@@ -192,13 +210,28 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         reporter = ResultReporter()
         reporter.print_backtest_results(result)
         
-        # 그래프 생성
+        # 그래프 생성 (전체 데이터 포함한 df 사용)
         print("\n[단계 4] 백테스트 결과 그래프 생성 중...")
         visualizer = Visualizer()
         visualizer.plot_backtest_results(
-            df, result,
+            original_df_for_backtest, result,
             buy_threshold=0,  # QQC 전략은 각도 기준이 아니므로 0으로 설정
-            sell_threshold=0
+            sell_threshold=0,
+            volume_window=volume_window_val,
+            ma_window=ma_window_val,
+            volume_multiplier=volume_multiplier_val
+        )
+        
+        # 기간별 그래프 생성
+        print("\n[단계 4-1] 기간별 백테스트 결과 그래프 생성 중...")
+        visualizer.plot_backtest_results_by_periods(
+            original_df_for_backtest, result,
+            base_dir='./images',
+            buy_threshold=0,  # QQC 전략은 각도 기준이 아니므로 0으로 설정
+            sell_threshold=0,
+            volume_window=volume_window_val,
+            ma_window=ma_window_val,
+            volume_multiplier=volume_multiplier_val
         )
         
         # 백테스트 결과 저장
@@ -232,12 +265,112 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         raise
 
 
+def wait_start(interval):
+    now = datetime.datetime.now()
+    #3m 이면 datetime now 가 3,6,9,12,15,18,....57 분 0초 가 아닌! 10초까지 대기하도록 함
+    #만야 5m 이면 5,10,15,20,25,30,35,40,45,50,55 분 0초 가 아닌! 10초까지 대기하도록 함
+    #만야 10m 이면 10,20,30,40,50 분 0초 가 아닌! 10초까지 대기하도록 함
+    #만야 30m 이면 30,40,50 분 0초 가 아닌! 10초까지 대기하도록 함
+    #만야 1h 이면 1시간 0분 0초 가 아닌! 10초까지 대기하도록 함
+    #만야 6h 이면 6시간 0분 0초 가 아닌! 10초까지 대기하도록 함
+    #만야 12h 이면 12시간 0분 0초 가 아닌! 10초까지 대기하도록 함
+    #만야 24h 이면 24시간 0분 0초 가 아닌! 10초까지 대기하도록 함
+    if interval == '3m':
+        force_wait = False
+        if now.minute %3 == 0:
+            force_wait = True
+
+        while ( force_wait or now.minute % 3 != 0):
+            time.sleep(1)
+            if now.minute % 3 !=0:
+                force_wait = False
+            now = datetime.datetime.now()
+            # 다음 3분 간격 시간 계산 (minute이 60 이상이 되지 않도록)
+            next_minute = ((now.minute // 3) + 1) * 3
+            if next_minute >= 60:
+                next_start_time = (now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
+            else:
+                next_start_time = now.replace(minute=next_minute, second=0, microsecond=0)
+            if next_start_time <= now:
+                next_start_time = next_start_time + timedelta(minutes=3)
+            left_seconds = int((next_start_time - now).total_seconds() + 10)
+            print(f"대기 시간: {left_seconds//3600}시간 {left_seconds%3600//60}분 {left_seconds%60}초 남음", end='\r')
+    elif interval == '5m':
+        force_wait = False
+        if now.minute %5 == 0:
+            force_wait = True
+
+        while ( force_wait or now.minute % 5 != 0):
+            time.sleep(1)
+            if now.minute % 5 !=0:
+                force_wait = False
+            now = datetime.datetime.now()
+            # 다음 5분 간격 시간 계산 (minute이 60 이상이 되지 않도록)
+            next_minute = ((now.minute // 5) + 1) * 5
+            if next_minute >= 60:
+                next_start_time = (now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
+            else:
+                next_start_time = now.replace(minute=next_minute, second=0, microsecond=0)
+            if next_start_time <= now:
+                next_start_time = next_start_time + timedelta(minutes=5)
+            left_seconds = int((next_start_time - now).total_seconds() + 10)
+            print(f"대기 시간: {left_seconds//3600}시간 {left_seconds%3600//60}분 {left_seconds%60}초 남음", end='\r')
+    elif interval == '10m':
+        force_wait = False
+        if now.minute %10 == 0:
+            force_wait = True
+
+        while ( force_wait or now.minute % 10 != 0):
+            time.sleep(1)
+            if now.minute % 10 !=0:
+                force_wait = False
+            now = datetime.datetime.now()
+            # 다음 10분 간격 시간 계산 (minute이 60 이상이 되지 않도록)
+            next_minute = ((now.minute // 10) + 1) * 10
+            if next_minute >= 60:
+                next_start_time = (now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
+            else:
+                next_start_time = now.replace(minute=next_minute, second=0, microsecond=0)
+            if next_start_time <= now:
+                next_start_time = next_start_time + timedelta(minutes=10)
+            left_seconds = int((next_start_time - now).total_seconds() + 10)
+            print(f"대기 시간: {left_seconds//3600}시간 {left_seconds%3600//60}분 {left_seconds%60}초 남음", end='\r')
+    elif interval == '30m':
+        force_wait = False
+        if now.minute %30 == 0:
+            force_wait = True
+
+        while ( force_wait or now.minute % 30 != 0):
+            time.sleep(1)
+            if now.minute % 30 !=0:
+                force_wait = False
+            now = datetime.datetime.now()
+            # 다음 30분 간격 시간 계산 (minute이 60 이상이 되지 않도록)
+            next_minute = ((now.minute // 30) + 1) * 30
+            if next_minute >= 60:
+                next_start_time = (now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
+            else:
+                next_start_time = now.replace(minute=next_minute, second=0, microsecond=0)
+            if next_start_time <= now:
+                next_start_time = next_start_time + timedelta(minutes=30)
+            left_seconds = int((next_start_time - now).total_seconds() + 10)
+            print(f"대기 시간: {left_seconds//3600}시간 {left_seconds%3600//60}분 {left_seconds%60}초 남음", end='\r')
+    
+    else:
+        pass
+    left_seconds = 10
+    for i in range(10):
+        time.sleep(1)
+        left_seconds -= 1
+        print(f"대기 시간: {left_seconds//3600}시간 {left_seconds%3600//60}분 {left_seconds%60}초 남음", end='\r')
+
 if __name__ == "__main__":
     # 시작 날짜 설정 (기본값: 2014-01-01)
     start_date = None  # '2014-01-01'
     
     # 종료 날짜 설정 (None이면 마지막까지 사용)
     end_date = None  # 예: '2023-12-31'
+    
     
     # 시작 잔고 설정 (기본값: 1,000,000원)
     initial_capital = 1_000_000  # 예: 10000000 (1천만원)
@@ -250,21 +383,32 @@ if __name__ == "__main__":
     hold_period = 15  # 매수 후 보유 기간 (캔들 수)
     profit_target = 17.6  # 이익실현 목표 수익률 (%)
     stop_loss = -28.6  # 손절 기준 수익률 (%)
-    
-    testresult = main(
-        start_date=start_date,
-        end_date=end_date,
-        initial_capital=initial_capital,
-        price_slippage=1000,
-        ticker='BTC',
-        interval='3m',
-        volume_window=volume_window,
-        ma_window=ma_window,
-        volume_multiplier=volume_multiplier,
-        buy_cash_ratio=buy_cash_ratio,
-        hold_period=hold_period,
-        profit_target=profit_target,
-        stop_loss=stop_loss
-    )
-    print(f"last_trade_status: {testresult}")
+    ticker = 'BTC'
+    interval = '3m'
+    price_slippage = 1000
+
+
+    #interval 의 갱신 주기의 갱신 시점에서 백테스트가 시작할 수 있도록 현재 시간 기준으로 갱신시간까지 대기
+
+    #모든 interval 시간의 대기 시간을 계산하여 대기함
+    wait_start("3m")
+    print("백테스트 시작")
+    while 1:
+        testresult = main(
+            start_date=start_date,
+            end_date=end_date,
+            initial_capital=initial_capital,
+            price_slippage=price_slippage,
+            ticker=ticker,
+            interval=interval,
+            volume_window=volume_window,
+            ma_window=ma_window,
+            volume_multiplier=volume_multiplier,
+            buy_cash_ratio=buy_cash_ratio,
+            hold_period=hold_period,
+            profit_target=profit_target,
+            stop_loss=stop_loss
+        )
+        print(f"last_trade_status: {testresult}")
+        wait_start("3m")
 
