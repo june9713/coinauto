@@ -99,9 +99,21 @@ async def root():
                 "/api/status": "현재 상태 조회",
                 "/api/trades": "거래 기록 조회",
                 "/api/results": "백테스트 결과 조회",
-                "/api/images/{image_type}": "이미지 조회 (today, 3days, 5days)"
+                "/api/logs": "에러 로그 조회",
+                "/api/images/{image_type}": "이미지 조회 (today, 3days, 5days)",
+                "/logs": "로그 페이지"
             }
         }
+
+
+@app.get("/logs")
+async def logs_page():
+    """로그 페이지 제공"""
+    html_path = os.path.join(os.getcwd(), 'logs.html')
+    if os.path.exists(html_path):
+        return FileResponse(html_path, media_type="text/html")
+    else:
+        raise HTTPException(status_code=404, detail="로그 페이지를 찾을 수 없습니다.")
 
 
 @app.get("/api/status")
@@ -146,6 +158,21 @@ async def get_results():
         err = traceback.format_exc()
         print("err", err)
         raise HTTPException(status_code=500, detail=f"결과 조회 실패: {str(e)}")
+
+
+@app.get("/api/logs")
+async def get_logs():
+    """에러 로그 조회"""
+    try:
+        logs = shared_state.get_error_logs()
+        return JSONResponse(content={
+            "logs": logs,
+            "count": len(logs)
+        })
+    except Exception as e:
+        err = traceback.format_exc()
+        print("err", err)
+        raise HTTPException(status_code=500, detail=f"로그 조회 실패: {str(e)}")
 
 
 @app.get("/api/images/{image_type}")

@@ -41,6 +41,36 @@
             opacity: 0.9;
         }
 
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+
+        .nav-button {
+            padding: 10px 20px;
+            border: 2px solid white;
+            border-radius: 8px;
+            font-size: 0.95em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-decoration: none;
+            display: inline-block;
+            color: white;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .nav-button:hover {
+            background: white;
+            color: #667eea;
+            transform: scale(1.05);
+        }
+
         .dashboard {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -384,6 +414,9 @@
         <header>
             <h1>📊 QQC Backtest Monitor</h1>
             <p class="subtitle">Real-time Cryptocurrency Trading Strategy Analysis</p>
+            <div class="nav-buttons">
+                <a href="/logs" class="nav-button">🚨 View Error Logs</a>
+            </div>
         </header>
 
         <div class="dashboard">

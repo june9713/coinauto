@@ -31,6 +31,7 @@ class SharedState:
         }
         self.is_running: bool = False
         self.last_error: Optional[str] = None
+        self.error_logs: List[Dict[str, Any]] = []  # 에러 로그 저장
     
     def update_backtest_result(self, result: Dict[str, Any], trades: List[Dict[str, Any]]):
         """
@@ -112,12 +113,21 @@ class SharedState:
     def set_error(self, error: Optional[str]):
         """
         오류 설정
-        
+
         Parameters:
         - error: 오류 메시지
         """
         with self._lock:
             self.last_error = error
+            if error:
+                # 에러 로그에 추가 (최대 100개까지만 보관)
+                self.error_logs.append({
+                    'timestamp': datetime.now().isoformat(),
+                    'error': error
+                })
+                # 로그가 100개를 초과하면 오래된 것부터 삭제
+                if len(self.error_logs) > 100:
+                    self.error_logs = self.error_logs[-100:]
     
     def get_status(self) -> Dict[str, Any]:
         """
@@ -190,6 +200,17 @@ class SharedState:
             err = traceback.format_exc()
             print("err", err)
             raise
+
+    def get_error_logs(self) -> List[Dict[str, Any]]:
+        """
+        에러 로그 조회 (스레드 안전)
+
+        Returns:
+        - list: 에러 로그 리스트 (최신 순)
+        """
+        with self._lock:
+            # 최신 로그가 먼저 오도록 역순으로 반환
+            return list(reversed(self.error_logs.copy()))
     
     def _serialize_value(self, value: Any) -> Any:
         """
