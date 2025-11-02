@@ -4,7 +4,7 @@ pytbithumb을 이용한 모든 기간 암호화폐 거래 데이터 수집 모�
 import traceback
 import pandas as pd
 from datetime import datetime, timedelta
-from pybithumb import Bithumb
+from pybithumb2 import BithumbClient, MarketID, TimeUnit
 import time
 import os
 from dotenv import load_dotenv
@@ -29,35 +29,62 @@ def collect_all_periods_data(ticker='BTC', interval='24h'):
     """
     try:
         # .env 파일에서 API 키 로드
-        conkey = os.getenv('CONKEY')
-        seckey = os.getenv('SECKEY')
+        api_key = os.getenv('CONKEY')
+        secret_key = os.getenv('SECKEY')
         
-        # Bithumb 객체 생성 (API 키가 있으면 전달)
-        if conkey and seckey:
-            bithumb = Bithumb(conkey, seckey)
-        else:
-            # API 키가 없어도 공개 데이터 조회는 가능
-            bithumb = Bithumb()
+        # BithumbClient 객체 생성 (API 키가 없어도 공개 데이터 조회는 가능)
+        bithumb = BithumbClient(api_key=api_key, secret_key=secret_key)
+        market = MarketID.from_string(f"KRW-{ticker}")
         
-        print(f"  [collect_all_periods_data] API 연결 확인: Bithumb 객체 생성 완료")
+        print(f"  [collect_all_periods_data] API 연결 확인: BithumbClient 객체 생성 완료")
         print(f"  수집 대상: {ticker}, 간격: {interval}")
         
         # 데이터 수집 (재시도 로직 포함)
-        # 문서에 따르면: Bithumb.get_candlestick("BTC", chart_intervals="30m")
         max_retries = 3
         retry_delay = 2
-        df = None
+        candles = None
         last_error = None
         
         for retry_count in range(max_retries):
             try:
                 print(f"  API 호출 중... (시도 {retry_count + 1}/{max_retries})")
-                print(f"    호출: get_candlestick('{ticker}', chart_intervals='{interval}')")
-                # 문서에 맞는 올바른 호출 방식: chart_intervals 키워드 인자 사용
-                df = bithumb.get_candlestick(ticker, chart_intervals=interval)
                 
-                if df is not None:
-                    print(f"  API 응답 수신: DataFrame 타입 확인")
+                # interval에 따라 적절한 메서드 호출 (최대 200개 조회)
+                if interval.endswith('m'):
+                    minutes = int(interval[:-1])
+                    if minutes in [1, 3, 5, 10, 15, 30, 60, 240]:
+                        unit = TimeUnit(minutes)
+                        print(f"    호출: get_minute_candles(market='{market}', count=200, unit={unit})")
+                        candles = bithumb.get_minute_candles(market=market, count=200, unit=unit)
+                    else:
+                        print(f"  오류: {interval}는 지원하지 않는 단위입니다.")
+                        return pd.DataFrame()
+                elif interval.endswith('h'):
+                    hours = int(interval[:-1])
+                    if hours == 1:
+                        # 1h는 60분으로 처리
+                        unit = TimeUnit(60)
+                        print(f"    호출: get_minute_candles(market='{market}', count=200, unit={unit})")
+                        candles = bithumb.get_minute_candles(market=market, count=200, unit=unit)
+                    elif hours == 24:
+                        print(f"    호출: get_day_candles(market='{market}', count=200)")
+                        candles = bithumb.get_day_candles(market=market, count=200)
+                    else:
+                        # 6h, 12h 등은 TimeUnit 범위를 초과하므로 지원하지 않음
+                        print(f"  오류: {interval}는 pybithumb2에서 직접 지원하지 않습니다.")
+                        return pd.DataFrame()
+                elif interval == '1w':
+                    print(f"    호출: get_week_candles(market='{market}', count=200)")
+                    candles = bithumb.get_week_candles(market=market, count=200)
+                elif interval == '1M':
+                    print(f"    호출: get_month_candles(market='{market}', count=200)")
+                    candles = bithumb.get_month_candles(market=market, count=200)
+                else:
+                    print(f"  오류: {interval}는 pybithumb2에서 직접 지원하지 않습니다.")
+                    return pd.DataFrame()
+                
+                if candles is not None:
+                    print(f"  API 응답 수신: {type(candles)} 타입 확인")
                     break
                 else:
                     print(f"  경고: API가 None을 반환했습니다.")
@@ -75,22 +102,36 @@ def collect_all_periods_data(ticker='BTC', interval='24h'):
                 else:
                     print("  최대 재시도 횟수 도달")
         
-        if df is None or len(df) == 0:
+        if candles is None or len(candles) == 0:
             print(f"경고: {ticker}의 {interval} 데이터를 수집하지 못했습니다.")
             if last_error:
                 print(f"  마지막 오류: {type(last_error).__name__}: {str(last_error)}")
             return pd.DataFrame()
         
-        # DataFrame 타입 확인
-        if not isinstance(df, pd.DataFrame):
-            print(f"  오류: API 응답이 DataFrame이 아닙니다. 타입: {type(df)}")
-            return pd.DataFrame()
+        # DFList[Candle]를 pandas DataFrame으로 변환
+        rows = []
+        index_dates = []
+        
+        for candle in candles:
+            # candle_date_time_kst를 사용하여 인덱스 생성
+            dt = candle.candle_date_time_kst
+            rows.append({
+                'open': float(candle.opening_price),
+                'high': float(candle.high_price),
+                'low': float(candle.low_price),
+                'close': float(candle.trade_price),
+                'volume': float(candle.candle_acc_trade_volume)
+            })
+            index_dates.append(dt)
+        
+        # DataFrame 생성
+        df = pd.DataFrame(rows)
+        if len(index_dates) == len(df):
+            df.index = pd.DatetimeIndex(index_dates)
+        else:
+            print(f"  경고: 인덱스 날짜 개수가 맞지 않습니다 ({len(index_dates)} vs {len(df)}). 기본 인덱스 사용")
         
         print(f"  수집된 데이터: {len(df)}개 행, 컬럼: {list(df.columns)}")
-        
-        # 인덱스를 datetime으로 변환 (이미 datetime이 아닌 경우)
-        if not isinstance(df.index, pd.DatetimeIndex):
-            df.index = pd.to_datetime(df.index)
         
         # 컬럼명이 대문자인 경우 소문자로 변환
         df.columns = [col.lower() for col in df.columns]
@@ -179,123 +220,29 @@ def get_maximum_historical_data(ticker='BTC', interval='24h'):
     - pd.DataFrame: 모든 기간의 OHLCV 데이터프레임
     """
     try:
-        # .env 파일에서 API 키 로드
-        conkey = os.getenv('CONKEY')
-        seckey = os.getenv('SECKEY')
-        
-        # Bithumb 객체 생성 (API 키가 있으면 전달)
-        if conkey and seckey:
-            bithumb = Bithumb(conkey, seckey)
-        else:
-            # API 키가 없어도 공개 데이터 조회는 가능
-            bithumb = Bithumb()
-        
-        print(f"  API 연결 확인: Bithumb 객체 생성 완료")
+        # pybithumb2는 한 번에 최대 200개만 조회 가능하므로,
+        # collect_all_periods_data를 사용하여 최근 200개를 가져옴
+        print(f"  API 연결 확인: BithumbClient 사용")
         print(f"  수집 대상: {ticker}, 간격: {interval}")
+        print(f"  주의: pybithumb2는 한 번에 최대 200개만 조회 가능합니다.")
         
-        # 먼저 최근 데이터부터 수집
-        # 주의: pybithumb의 get_candlestick은 개수 지정 파라미터가 없음
-        # 기본적으로 최근 데이터만 반환하므로, 한 번의 호출로 가능한 모든 데이터를 수집
-        all_data = []
-        collected_count = 0
-        max_retries = 3  # 최대 재시도 횟수
-        retry_delay = 2  # 재시도 대기 시간 (초)
+        # 먼저 collect_all_periods_data로 최근 200개 수집
+        df = collect_all_periods_data(ticker, interval)
         
-        # 문서에 따르면 get_candlestick은 기본적으로 최근 데이터를 반환
-        # 여러 번 호출해도 같은 데이터가 반환될 수 있으므로 한 번만 호출
-        try:
-            # API 호출 (재시도 로직 포함)
-            df = None
-            last_error = None
-            
-            for retry_count in range(max_retries):
-                try:
-                    print(f"  API 호출 중... (시도 {retry_count + 1}/{max_retries})")
-                    print(f"    호출: get_candlestick('{ticker}', chart_intervals='{interval}')")
-                    # 문서에 맞는 올바른 호출 방식: chart_intervals 키워드 인자 사용
-                    df = bithumb.get_candlestick(ticker, chart_intervals=interval)
-                    
-                    if df is not None:
-                        print(f"  API 응답 수신: DataFrame 타입 확인")
-                        break
-                    else:
-                        print(f"  경고: API가 None을 반환했습니다.")
-                        
-                except Exception as api_error:
-                    last_error = api_error
-                    err = traceback.format_exc()
-                    print(f"  API 호출 오류 (시도 {retry_count + 1}/{max_retries}):")
-                    print(f"  오류 유형: {type(api_error).__name__}")
-                    print(f"  오류 메시지: {str(api_error)}")
-                    
-                    if retry_count < max_retries - 1:
-                        print(f"  {retry_delay}초 후 재시도...")
-                        time.sleep(retry_delay)
-                    else:
-                        print("  최대 재시도 횟수 도달")
-            
-            if df is None or len(df) == 0:
-                print(f"  오류: API 호출 실패 - 데이터가 없습니다.")
-                if last_error:
-                    print(f"  마지막 오류: {type(last_error).__name__}: {str(last_error)}")
-                return pd.DataFrame()
-            
-            # DataFrame 타입 확인
-            if not isinstance(df, pd.DataFrame):
-                print(f"  오류: API 응답이 DataFrame이 아닙니다. 타입: {type(df)}")
-                return pd.DataFrame()
-            
-            print(f"  수집된 데이터: {len(df)}개 행, 컬럼: {list(df.columns)}")
-            
-            # 인덱스를 datetime으로 변환
-            if not isinstance(df.index, pd.DatetimeIndex):
-                df.index = pd.to_datetime(df.index)
-            
-            # 컬럼명 소문자 변환
-            df.columns = [col.lower() for col in df.columns]
-            
-            # 데이터 정렬
-            df = df.sort_index()
-            
-            all_data.append(df)
-            collected_count += len(df)
-            
-            print(f"  진행: {len(df)}개 데이터 수집 완료")
-                        
-        except Exception as e:
-            err = traceback.format_exc()
-            print(f"  데이터 수집 중 오류 발생:")
-            print("err", err)
-        
-        if len(all_data) == 0:
-            print(f"\n경고: {ticker}의 {interval} 데이터를 수집하지 못했습니다.")
-            print(f"  fallback: 기본 수집 방식으로 재시도합니다...")
-            # fallback: 기본 방식으로 재시도
-            try:
-                fallback_df = collect_all_periods_data(ticker, interval)
-                if fallback_df is not None and len(fallback_df) > 0:
-                    print(f"  성공: fallback 방식으로 {len(fallback_df)}개 데이터 수집 완료")
-                    return fallback_df
-            except Exception as fallback_error:
-                err = traceback.format_exc()
-                print(f"  fallback도 실패:")
-                print("err", err)
-            
+        if df is None or len(df) == 0:
+            print(f"  오류: 기본 수집 방식 실패")
             return pd.DataFrame()
         
-        # 모든 데이터프레임을 결합 (현재는 하나의 데이터프레임만 있지만, 일관성을 위해)
-        final_df = pd.concat(all_data, ignore_index=False)
-        
         # 중복 제거 (인덱스 기준)
-        final_df = final_df[~final_df.index.duplicated(keep='first')]
+        df = df[~df.index.duplicated(keep='first')]
         
         # 시간순 정렬
-        final_df = final_df.sort_index()
+        df = df.sort_index()
         
-        print(f"\n성공: {ticker} {interval} 총 {len(final_df)}개 데이터 수집 완료")
-        print(f"  기간: {final_df.index[0]} ~ {final_df.index[-1]}")
+        print(f"\n성공: {ticker} {interval} 총 {len(df)}개 데이터 수집 완료")
+        print(f"  기간: {df.index[0]} ~ {df.index[-1]}")
         
-        return final_df
+        return df
         
     except Exception as e:
         err = traceback.format_exc()

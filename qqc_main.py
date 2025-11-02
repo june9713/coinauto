@@ -2,6 +2,13 @@
 QQC 백테스트 메인 실행 모듈
 qqc_test 모듈을 호출하여 백테스트 실행
 """
+import os
+
+import warnings
+# Python 3.13 GIL 경고 방지
+# pandas._libs.pandas_parser가 GIL 없이 안전하게 실행될 수 있다고 선언하지 않아 발생하는 경고를 필터링
+#warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*global interpreter lock.*')
+
 from ast import Or
 import traceback
 import time
