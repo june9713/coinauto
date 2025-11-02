@@ -28,12 +28,12 @@ class Config:
     
     # 데이터 수집 기본 설정
     DEFAULT_TICKER = 'BTC'  # 기본 암호화폐 티커
-    DEFAULT_INTERVAL = '24h'  # 기본 캔들스틱 간격
+    DEFAULT_INTERVAL = '3m'  # 기본 캔들스틱 간격
     DEFAULT_START_DATE = '2014-01-01'  # 기본 시작 날짜
     
     # 시각화 설정
-    DEFAULT_GRAPH_SAVE_PATH = 'backtest_result.png'  # 기본 그래프 저장 경로
-    GRAPH_DPI = 300  # 그래프 해상도
+    DEFAULT_GRAPH_SAVE_PATH = 'backtest_result.jpg'  # 기본 그래프 저장 경로
+    GRAPH_DPI = 50  # 그래프 해상도 (300에서 70으로로 감소)
     
     # 백테스트 결과 저장 설정
     BACKTEST_RESULT_FILE = os.path.join(DATA_DIR, 'backtest_results.csv')  # 백테스트 결과 저장 파일

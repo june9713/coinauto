@@ -1,12 +1,16 @@
 """
 실제 거래 실행 모듈
-Bithumb API v2를 사용한 매수/매도 실행
+Bithumb API v2를 사용한 매수/매도 실행 (직접 API 호출 방식)
 """
 import traceback
 import os
 import time
+import uuid
+import hashlib
+import jwt
+from urllib.parse import urlencode
+import requests
 from decimal import Decimal
-from pybithumb2 import BithumbClient, MarketID, Currency, TradeSide, OrderType
 from dotenv import load_dotenv
 
 
@@ -25,29 +29,88 @@ class Trader:
         - api_key (str, optional): API 키
         - api_secret (str, optional): API 시크릿 키
         """
-        self.api_key = api_key
-        self.api_secret = api_secret
-        self._bithumb = None
+        self.api_key = api_key or os.getenv('CONKEY')
+        self.api_secret = api_secret or os.getenv('SECKEY')
+        self.api_url = 'https://api.bithumb.com'
+        
+        if not self.api_key or not self.api_secret:
+            raise ValueError("API 키가 설정되지 않았습니다. .env 파일에 CONKEY와 SECKEY를 설정하세요.")
+        
+        print(f"api_key: {self.api_key[:10] if self.api_key else None}...")
+        print(f"secret_key: {self.api_secret[:10] if self.api_secret else None}...")
     
-    def _get_bithumb_client(self):
+    def _generate_jwt_token(self, query_params=None):
         """
-        Bithumb 클라이언트 반환 (싱글톤 패턴)
+        JWT 토큰 생성
+        
+        Parameters:
+        - query_params (dict, optional): 쿼리 파라미터
         
         Returns:
-        - BithumbClient: Bithumb 클라이언트 객체
+        - str: Authorization 토큰
         """
-        if self._bithumb is None:
-            # .env 파일에서 API 키 로드
-            api_key = self.api_key or os.getenv('CONKEY')
-            secret_key = self.api_secret or os.getenv('SECKEY')
-            print(f"api_key: {api_key[:10] if api_key else None}...")
-            print(f"secret_key: {secret_key[:10] if secret_key else None}...")
-            if not api_key or not secret_key:
-                raise ValueError("API 키가 설정되지 않았습니다. .env 파일에 CONKEY와 SECKEY를 설정하세요.")
+        try:
+            # 쿼리 파라미터가 있으면 인코딩
+            if query_params:
+                query = urlencode(query_params).encode()
+                query_hash = hashlib.sha512(query).hexdigest()
+            else:
+                query_hash = ''
             
-            self._bithumb = BithumbClient(api_key=api_key, secret_key=secret_key)
+            # JWT payload 생성
+            payload = {
+                'access_key': self.api_key,
+                'nonce': str(uuid.uuid4()),
+                'timestamp': round(time.time() * 1000),
+                'query_hash': query_hash,
+                'query_hash_alg': 'SHA512',
+            }
+            
+            # JWT 토큰 생성
+            jwt_token = jwt.encode(payload, self.api_secret, algorithm='HS256')
+            authorization_token = f'Bearer {jwt_token}'
+            
+            return authorization_token
+            
+        except Exception as e:
+            err = traceback.format_exc()
+            print("err", err)
+            raise
+    
+    def _get_order_chance(self, market='KRW-BTC'):
+        """
+        주문 가능 정보 조회
         
-        return self._bithumb
+        Parameters:
+        - market (str): 마켓 ID (예: 'KRW-BTC')
+        
+        Returns:
+        - dict: 주문 가능 정보
+        """
+        try:
+            param = {'market': market}
+            authorization_token = self._generate_jwt_token(param)
+            
+            headers = {
+                'Authorization': authorization_token
+            }
+            
+            response = requests.get(
+                f'{self.api_url}/v1/orders/chance',
+                params=param,
+                headers=headers,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                raise ValueError(f"주문 가능 정보 조회 실패: HTTP {response.status_code}, {response.text}")
+                
+        except Exception as e:
+            err = traceback.format_exc()
+            print("err", err)
+            raise
     
     def get_balance(self, ticker='BTC'):
         """
@@ -60,34 +123,37 @@ class Trader:
         - dict: {'cash': float, 'coin': float} - 현금(KRW) 잔고, 코인 보유량
         """
         try:
-            bithumb = self._get_bithumb_client()
+            market = f'KRW-{ticker}'
             
-            # 디버깅: 전체 잔고 조회 (모든 코인 잔고 확인)
+            # 주문 가능 정보 조회 (잔고 정보 포함)
+            chance_info = self._get_order_chance(market)
+            
             print(f"\n[잔고 조회 디버깅] ticker={ticker}")
             
-            # pybithumb2는 get_accounts()로 모든 계좌 잔고를 한 번에 조회
-            accounts = bithumb.get_accounts()
-            print(f"  전체 계좌 조회 결과 타입: {type(accounts)}, 개수: {len(accounts) if hasattr(accounts, '__len__') else 'N/A'}")
-            
-            # Account 객체들에서 코인과 KRW 잔고 추출
+            # bid_account: 매수 시 사용하는 화폐 (KRW) 계좌
+            # ask_account: 매도 시 사용하는 화폐 (BTC) 계좌
             coin_amount = 0.0
             cash = 0.0
             
-            for account in accounts:
-                currency_code = account.currency.code if hasattr(account.currency, 'code') else str(account.currency)
-                balance = float(account.balance)
-                locked = float(account.locked) if hasattr(account, 'locked') else 0.0
-                
-                print(f"  계좌: {currency_code}, 잔고={balance}, 잠김={locked}")
-                
-                if currency_code.upper() == ticker.upper():
-                    coin_amount = balance
-                    print(f"  코인 잔고 ({ticker}): {coin_amount}")
-                elif currency_code.upper() == 'KRW':
-                    cash = balance
-                    print(f"  KRW 잔고: {cash}")
+            if 'bid_account' in chance_info:
+                bid_account = chance_info['bid_account']
+                if bid_account.get('currency') == 'KRW':
+                    balance = float(bid_account.get('balance', 0))
+                    locked = float(bid_account.get('locked', 0))  # 주문 중인 금액
+                    cash = balance - locked  # 실제 주문 가능한 금액
+                    print(f"  KRW 전체 잔고: {balance:,.0f}원")
+                    print(f"  KRW 주문 중: {locked:,.0f}원")
+                    print(f"  KRW 주문 가능: {cash:,.0f}원")
             
-            print(f"  최종 결과: 현금={cash:,.0f}원, 코인={coin_amount:.8f} {ticker}")
+            if 'ask_account' in chance_info:
+                ask_account = chance_info['ask_account']
+                if ask_account.get('currency') == ticker.upper():
+                    balance = float(ask_account.get('balance', 0))
+                    locked = float(ask_account.get('locked', 0))  # 주문 중인 수량
+                    coin_amount = balance - locked  # 실제 주문 가능한 수량
+                    print(f"  {ticker} 전체 잔고: {balance:.8f}")
+                    print(f"  {ticker} 주문 중: {locked:.8f}")
+                    print(f"  {ticker} 주문 가능: {coin_amount:.8f}")
             
             return {
                 'cash': cash,
@@ -112,11 +178,19 @@ class Trader:
         - dict: 주문 결과 {'success': bool, 'message': str, 'order_id': str, 'amount': float, 'price': float}
         """
         try:
-            bithumb = self._get_bithumb_client()
+            market = f'KRW-{ticker}'
             
-            # 현재 잔고 조회
-            balance = self.get_balance(ticker)
-            available_cash = balance['cash']
+            # 주문 가능 정보 조회
+            chance_info = self._get_order_chance(market)
+            
+            # 주문 가능한 KRW 금액 계산 (주문 가능 정보에서 직접 조회)
+            available_cash = 0.0
+            if 'bid_account' in chance_info:
+                bid_account = chance_info['bid_account']
+                if bid_account.get('currency') == 'KRW':
+                    balance = float(bid_account.get('balance', 0))
+                    locked = float(bid_account.get('locked', 0))
+                    available_cash = balance - locked  # 실제 주문 가능한 금액
             
             # 사용할 현금 계산
             if cash_amount is not None:
@@ -135,92 +209,62 @@ class Trader:
                     'price': 0.0
                 }
             
-            # MarketID 생성 (KRW-BTC 형식)
-            market = MarketID.from_string(f"KRW-{ticker}")
+            # 주문 파라미터 설정
+            # 시장가 매수 주문: side='bid', ord_type='price' (금액으로 매수)
+            order_params = {
+                'market': market,
+                'side': 'bid',  # 매수
+                'ord_type': 'price',  # 금액으로 매수 (시장가)
+                'price': str(int(use_cash))  # 사용할 금액
+            }
             
-            # 현재가 조회 (주문 가격 결정용)
-            try:
-                # pybithumb2는 get_snapshots()로 현재가 조회
-                snapshots = bithumb.get_snapshots(markets=[market])
-                if snapshots and len(snapshots) > 0:
-                    current_price = float(snapshots[0].trade_price)
-                    print(f"  현재가 조회: {current_price:,.0f}원")
-                else:
-                    current_price = 0
-            except Exception as e:
-                print(f"  경고: 현재가 조회 실패: {str(e)}")
-                current_price = 0
+            # JWT 토큰 생성
+            authorization_token = self._generate_jwt_token(order_params)
             
-            # 시장가 매수 주문 (pybithumb2 방식)
-            # pybithumb2는 submit_order 메서드 사용
-            try:
-                # 주문할 수량 계산 (시장가이므로 가격은 자동 결정)
-                if current_price > 0:
-                    estimated_units = Decimal(str(use_cash / current_price))
-                else:
-                    # 현재가를 알 수 없으면 작은 수량으로 시작
-                    estimated_units = Decimal("0.001")
+            headers = {
+                'Authorization': authorization_token
+            }
+            
+            print(f"  주문 파라미터: {order_params}")
+            
+            # 주문 실행
+            response = requests.post(
+                f'{self.api_url}/v1/orders',
+                json=order_params,
+                headers=headers,
+                timeout=10
+            )
+            
+            print(f"  API 응답 상태 코드: {response.status_code}")
+            print(f"  API 응답 내용: {response.text}")
+            
+            if response.status_code == 200 or response.status_code == 201:
+                result = response.json()
                 
-                # 시장가 주문 시도
-                order_result = bithumb.submit_order(
-                    market=market,
-                    side=TradeSide.BID,  # 매수: BID
-                    volume=estimated_units,
-                    price=Decimal("0"),  # 시장가 주문은 price를 0으로 설정
-                    ord_type=OrderType.MARKET  # 시장가 주문
-                )
+                # 주문 결과 파싱
+                order_id = result.get('uuid', result.get('id', ''))
+                executed_volume = float(result.get('executed_volume', 0))
+                executed_price = float(result.get('price', 0))
                 
-                print(f"  주문 결과 타입: {type(order_result)}, 값: {order_result}")
-                
-            except Exception as e:
-                # 시장가 주문이 안되면 지정가 주문으로 대체
-                if current_price > 0:
-                    buy_price = Decimal(str(int(current_price * 1.01)))  # 현재가의 1.01배로 지정가 주문
-                    estimated_units = Decimal(str(use_cash / float(buy_price)))
-                    order_result = bithumb.submit_order(
-                        market=market,
-                        side=TradeSide.BID,
-                        volume=estimated_units,
-                        price=buy_price,
-                        ord_type=OrderType.LIMIT  # 지정가 주문
-                    )
-                else:
-                    raise ValueError(f"현재가 조회 실패 및 주문 실패: {str(e)}")
-            
-            if order_result is None:
-                return {
-                    'success': False,
-                    'message': '주문 실패: API 응답이 None입니다.',
-                    'order_id': None,
-                    'amount': 0.0,
-                    'price': 0.0
-                }
-            
-            # 주문 결과 파싱 (pybithumb2는 Order 모델 반환)
-            if hasattr(order_result, 'uuid'):
-                order_id = str(order_result.uuid)
-                amount = float(order_result.volume)
-                price = float(order_result.price)
                 return {
                     'success': True,
                     'message': '매수 주문 성공',
-                    'order_id': order_id,
-                    'amount': amount,
-                    'price': price
-                }
-            elif isinstance(order_result, dict):
-                return {
-                    'success': True,
-                    'message': order_result.get('message', '매수 주문 성공'),
-                    'order_id': str(order_result.get('uuid', order_result.get('order_id', ''))),
-                    'amount': float(order_result.get('volume', 0)),
-                    'price': float(order_result.get('price', 0))
+                    'order_id': str(order_id),
+                    'amount': executed_volume,
+                    'price': executed_price
                 }
             else:
+                error_msg = response.text
+                try:
+                    error_json = response.json()
+                    error_msg = error_json.get('error', {}).get('message', error_msg)
+                except:
+                    pass
+                
                 return {
-                    'success': True,
-                    'message': '매수 주문 성공',
-                    'order_id': str(order_result),
+                    'success': False,
+                    'message': f'매수 주문 실패: HTTP {response.status_code}, {error_msg}',
+                    'order_id': None,
                     'amount': 0.0,
                     'price': 0.0
                 }
@@ -248,7 +292,10 @@ class Trader:
         - dict: 주문 결과 {'success': bool, 'message': str, 'order_id': str, 'amount': float, 'price': float}
         """
         try:
-            bithumb = self._get_bithumb_client()
+            market = f'KRW-{ticker}'
+            
+            # 주문 가능 정보 조회
+            chance_info = self._get_order_chance(market)
             
             # 현재 잔고 조회
             balance = self.get_balance(ticker)
@@ -269,84 +316,63 @@ class Trader:
                     'price': 0.0
                 }
             
-            # MarketID 생성 (KRW-BTC 형식)
-            market = MarketID.from_string(f"KRW-{ticker}")
+            # 주문 파라미터 설정
+            # 시장가 매도 주문: side='ask', ord_type='market' (수량으로 매도)
+            order_params = {
+                'market': market,
+                'side': 'ask',  # 매도
+                'ord_type': 'market',  # 시장가 매도
+                'volume': str(Decimal(str(sell_amount)))  # 매도할 수량
+            }
             
-            # 현재가 조회 (주문 가격 결정용)
-            try:
-                # pybithumb2는 get_snapshots()로 현재가 조회
-                snapshots = bithumb.get_snapshots(markets=[market])
-                if snapshots and len(snapshots) > 0:
-                    current_price = float(snapshots[0].trade_price)
-                    print(f"  현재가 조회: {current_price:,.0f}원")
-                else:
-                    current_price = 0
-            except Exception as e:
-                print(f"  경고: 현재가 조회 실패: {str(e)}")
-                current_price = 0
+            # JWT 토큰 생성
+            authorization_token = self._generate_jwt_token(order_params)
             
-            # 시장가 매도 주문 (pybithumb2 방식)
-            try:
-                # 시장가 매도 주문
-                order_result = bithumb.submit_order(
-                    market=market,
-                    side=TradeSide.ASK,  # 매도: ASK
-                    volume=Decimal(str(sell_amount)),
-                    price=Decimal("0"),  # 시장가 주문은 price를 0으로 설정
-                    ord_type=OrderType.MARKET  # 시장가 주문
-                )
+            headers = {
+                'Authorization': authorization_token
+            }
+            
+            print(f"  주문 파라미터: {order_params}")
+            
+            # 주문 실행
+            response = requests.post(
+                f'{self.api_url}/v1/orders',
+                json=order_params,
+                headers=headers,
+                timeout=10
+            )
+            
+            print(f"  API 응답 상태 코드: {response.status_code}")
+            print(f"  API 응답 내용: {response.text}")
+            
+            if response.status_code == 200 or response.status_code == 201:
+                result = response.json()
                 
-                print(f"  주문 결과 타입: {type(order_result)}, 값: {order_result}")
+                # 주문 결과 파싱
+                order_id = result.get('uuid', result.get('id', ''))
+                executed_volume = float(result.get('executed_volume', 0))
+                executed_price = float(result.get('price', 0))
                 
-            except Exception as e:
-                # 시장가 주문이 안되면 지정가 주문으로 대체
-                if current_price > 0:
-                    sell_price = Decimal(str(int(current_price * 0.99)))  # 현재가의 0.99배로 지정가 주문
-                    order_result = bithumb.submit_order(
-                        market=market,
-                        side=TradeSide.ASK,
-                        volume=Decimal(str(sell_amount)),
-                        price=sell_price,
-                        ord_type=OrderType.LIMIT  # 지정가 주문
-                    )
-                else:
-                    raise ValueError(f"현재가 조회 실패 및 주문 실패: {str(e)}")
-            
-            if order_result is None:
-                return {
-                    'success': False,
-                    'message': '주문 실패: API 응답이 None입니다.',
-                    'order_id': None,
-                    'amount': 0.0,
-                    'price': 0.0
-                }
-            
-            # 주문 결과 파싱 (pybithumb2는 Order 모델 반환)
-            if hasattr(order_result, 'uuid'):
-                order_id = str(order_result.uuid)
-                amount = float(order_result.volume)
-                price = float(order_result.price)
                 return {
                     'success': True,
                     'message': '매도 주문 성공',
-                    'order_id': order_id,
-                    'amount': amount,
-                    'price': price
-                }
-            elif isinstance(order_result, dict):
-                return {
-                    'success': True,
-                    'message': order_result.get('message', '매도 주문 성공'),
-                    'order_id': str(order_result.get('uuid', order_result.get('order_id', ''))),
-                    'amount': float(order_result.get('volume', sell_amount)),
-                    'price': float(order_result.get('price', 0))
+                    'order_id': str(order_id),
+                    'amount': executed_volume,
+                    'price': executed_price
                 }
             else:
+                error_msg = response.text
+                try:
+                    error_json = response.json()
+                    error_msg = error_json.get('error', {}).get('message', error_msg)
+                except:
+                    pass
+                
                 return {
-                    'success': True,
-                    'message': '매도 주문 성공',
-                    'order_id': str(order_result),
-                    'amount': sell_amount,
+                    'success': False,
+                    'message': f'매도 주문 실패: HTTP {response.status_code}, {error_msg}',
+                    'order_id': None,
+                    'amount': 0.0,
                     'price': 0.0
                 }
             
@@ -360,4 +386,3 @@ class Trader:
                 'amount': 0.0,
                 'price': 0.0
             }
-

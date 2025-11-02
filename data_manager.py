@@ -53,6 +53,7 @@ class DataManager:
         """
         저장된 데이터 파일에서 데이터를 로드합니다.
         단일 파일이 없으면 날짜별 폴더에서 시간별 분할 파일들을 찾아 로드합니다.
+        현재 설정의 데이터가 없으면 ticker와 interval만 일치하는 다른 조건의 파일도 찾아서 로드합니다.
         
         Returns:
         - pd.DataFrame: 저장된 OHLCV 데이터프레임. 파일이 없으면 None 반환
@@ -90,6 +91,18 @@ class DataManager:
             base_filename = os.path.basename(self.data_file)
             name_without_ext = os.path.splitext(base_filename)[0]
             
+            # ticker와 interval만 일치하는 파일을 찾기 위한 패턴 생성
+            # 파일명 형식: history_..._{ticker}_{interval}.csv (예: history_vw55_mw9_..._btc_3m.csv)
+            # condition_dict에서 ticker와 interval 추출
+            ticker_interval_suffix = None
+            if self.condition_dict and 'ticker' in self.condition_dict and 'interval' in self.condition_dict:
+                ticker = self.condition_dict['ticker'].lower()
+                interval = self.condition_dict['interval']
+                # 파일명 끝에 _{ticker}_{interval} 형식으로 포함되어 있음
+                ticker_interval_suffix = f"_{ticker}_{interval}"
+            else:
+                ticker_interval_suffix = None
+            
             # 날짜별 폴더에서 해당 조건으로 시작하는 모든 시간별 파일 찾기
             all_dataframes = []
             
@@ -117,7 +130,21 @@ class DataManager:
                     
                     # 해당 날짜 폴더의 모든 파일 확인
                     for filename in os.listdir(date_dir):
-                        if filename.startswith(name_without_ext) and filename.endswith('.csv'):
+                        if not filename.endswith('.csv'):
+                            continue
+                        
+                        # 현재 조건의 파일명으로 시작하는지 확인
+                        matches_current = filename.startswith(name_without_ext)
+                        
+                        # 현재 조건이 아니면 ticker와 interval만 일치하는 파일인지 확인
+                        matches_ticker_interval = False
+                        if not matches_current and ticker_interval_suffix:
+                            # 파일명이 history_로 시작하고 _{ticker}_{interval}로 끝나는지 확인
+                            if filename.startswith('history_') and filename.endswith(f"{ticker_interval_suffix}.csv"):
+                                matches_ticker_interval = True
+                        
+                        # 현재 조건 또는 ticker+interval 일치하는 파일이면 로드
+                        if matches_current or matches_ticker_interval:
                             file_path = os.path.join(date_dir, filename)
                             try:
                                 file_df = pd.read_csv(file_path, index_col=0, parse_dates=True)
@@ -129,6 +156,8 @@ class DataManager:
             
             if len(all_dataframes) == 0:
                 print(f"기록 파일이 없습니다: {self.data_file}")
+                if ticker_interval_suffix:
+                    print(f"  검색 패턴: history_*{ticker_interval_suffix}.csv")
                 return None
             
             # 모든 데이터프레임 병합
@@ -1109,11 +1138,12 @@ class DataManager:
     def load_backtest_results(self, ticker='BTC', condition_dict=None):
         """
         저장된 백테스트 결과를 로드합니다.
-        
+        단일 파일이 없으면 날짜별 폴더에서 시간별 분할 파일들을 찾아 로드하여 병합합니다.
+
         Parameters:
         - ticker (str): 암호화폐 티커. 기본값 'BTC'
         - condition_dict (dict, optional): 조건 딕셔너리. None이면 self.condition_dict 또는 기본 경로 사용
-        
+
         Returns:
         - pd.DataFrame or None: 백테스트 결과 데이터프레임. 파일이 없으면 None 반환
         """
@@ -1122,25 +1152,98 @@ class DataManager:
             if condition_dict is None:
                 condition_dict = self.condition_dict
             result_file = Config.get_backtest_result_file_path(ticker=ticker, condition_dict=condition_dict)
-            
-            if not os.path.exists(result_file):
+
+            # 먼저 단일 파일 확인
+            if os.path.exists(result_file):
+                df = pd.read_csv(result_file)
+
+                # execution_time을 datetime으로 변환
+                if 'execution_time' in df.columns:
+                    df['execution_time'] = pd.to_datetime(df['execution_time'])
+
+                # 최신순으로 정렬
+                df = df.sort_values('execution_time', ascending=False)
+
+                print(f"백테스트 결과 로드 완료: {result_file}")
+                print(f"  총 {len(df)}개 기록")
+
+                return df
+
+            # 단일 파일이 없으면 날짜별 폴더에서 시간별 분할 파일들 찾기
+            print("날짜별 폴더에서 백테스트 결과 시간별 분할 파일을 검색합니다...")
+
+            # 파일명에서 조건 부분 추출 (확장자 제외)
+            base_filename = os.path.basename(result_file)
+            name_without_ext = os.path.splitext(base_filename)[0]
+
+            # 날짜별 폴더에서 해당 조건으로 시작하는 모든 시간별 파일 찾기
+            all_dataframes = []
+
+            if os.path.exists(self.data_dir):
+                # 날짜별 폴더 목록 가져오기 (YYYY-MM-DD 형식)
+                date_folders = []
+                for item in os.listdir(self.data_dir):
+                    item_path = os.path.join(self.data_dir, item)
+                    if os.path.isdir(item_path) and len(item) == 10 and item.count('-') == 2:
+                        try:
+                            # 날짜 형식 검증
+                            datetime.strptime(item, '%Y-%m-%d')
+                            date_folders.append(item)
+                        except ValueError:
+                            continue
+
+                # 날짜순으로 정렬
+                date_folders.sort()
+
+                # 각 날짜 폴더에서 시간별 파일 찾기
+                for date_folder in date_folders:
+                    date_dir = os.path.join(self.data_dir, date_folder)
+                    if not os.path.isdir(date_dir):
+                        continue
+
+                    # 해당 날짜 폴더의 모든 파일 확인
+                    for filename in os.listdir(date_dir):
+                        if not filename.endswith('.csv'):
+                            continue
+
+                        # 현재 조건의 파일명으로 시작하는지 확인
+                        if filename.startswith(name_without_ext):
+                            file_path = os.path.join(date_dir, filename)
+                            try:
+                                file_df = pd.read_csv(file_path)
+                                if len(file_df) > 0:
+                                    all_dataframes.append(file_df)
+                            except Exception as e:
+                                print(f"경고: 파일 로드 실패 ({file_path}): {e}")
+                                continue
+
+            if len(all_dataframes) == 0:
                 print(f"백테스트 결과 파일이 없습니다: {result_file}")
                 return None
-            
-            df = pd.read_csv(result_file)
-            
+
+            # 모든 데이터프레임 병합
+            df = pd.concat(all_dataframes, ignore_index=True)
+
             # execution_time을 datetime으로 변환
             if 'execution_time' in df.columns:
                 df['execution_time'] = pd.to_datetime(df['execution_time'])
-            
+
+            # 중복 제거 (execution_time, trade_date, action 기준)
+            if 'execution_time' in df.columns and 'trade_date' in df.columns and 'action' in df.columns:
+                df = df.drop_duplicates(subset=['execution_time', 'trade_date', 'action'], keep='last')
+            elif 'execution_time' in df.columns and 'trade_date' in df.columns:
+                df = df.drop_duplicates(subset=['execution_time', 'trade_date'], keep='last')
+            elif 'trade_date' in df.columns:
+                df = df.drop_duplicates(subset=['trade_date'], keep='last')
+
             # 최신순으로 정렬
             df = df.sort_values('execution_time', ascending=False)
-            
-            print(f"백테스트 결과 로드 완료: {result_file}")
-            print(f"  총 {len(df)}개 기록")
-            
+
+            print(f"백테스트 결과 로드 완료 (시간별 분할 파일 병합): {len(df)}개 기록")
+            print(f"  로드된 파일 수: {len(all_dataframes)}개")
+
             return df
-            
+
         except Exception as e:
             err = traceback.format_exc()
             print("err", err)

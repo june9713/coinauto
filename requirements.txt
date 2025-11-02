@@ -1,0 +1,19 @@
+# 데이터 처리
+pandas>=2.0.0
+numpy>=1.24.0
+
+# 시각화
+matplotlib>=3.7.0
+
+# API 클라이언트
+requests>=2.31.0
+pybithumb2>=1.0.0  # Bithumb API 클라이언트 (필요시)
+
+# 인증 및 환경 변수
+python-dotenv>=1.0.0
+PyJWT>=2.8.0
+
+# 웹 서버
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+

@@ -626,6 +626,41 @@ class QQCTestEngine:
                 
                 asset_history.append(result['asset_history'])
             
+            # 마지막 캔들에서 조건을 만족했지만 다음 캔들이 없어서 매수가 실행되지 않은 경우 처리
+            last_pending_buy_executed = False
+            if self._pending_buy and not self._holding and len(df) > 0:
+                print(f"\n[디버깅] 마지막 캔들에서 매수 조건 충족, 즉시 매수 실행")
+                
+                # 마지막 캔들을 버퍼에서 찾기
+                if len(self._candle_buffer) > 0:
+                    last_candle_in_buffer = self._candle_buffer[-1]
+                    last_candle_index_in_buffer = len(self._candle_buffer) - 1
+                    
+                    # 마지막 캔들 기준으로 매수 실행
+                    result = self._execute_buy_at_open(
+                        last_candle_in_buffer, 
+                        last_candle_index_in_buffer, 
+                        self._pending_buy_condition_date,
+                        self._pending_buy_absolute_index
+                    )
+                    
+                    # 결과 기록
+                    if result and result.get('trade') is not None:
+                        trades.append(result['trade'])
+                        last_pending_buy_executed = True  # 마지막 캔들에서 매수 실행됨을 표시
+                        
+                        # 자산 기록도 업데이트
+                        if len(asset_history) > 0:
+                            asset_history[-1] = result['asset_history']
+                        else:
+                            asset_history.append(result['asset_history'])
+                    
+                    # 플래그 초기화
+                    self._pending_buy = False
+                    self._pending_buy_condition_candle_index = None
+                    self._pending_buy_condition_date = None
+                    self._pending_buy_absolute_index = None
+            
             # 최종 수익률 계산
             final_return = ((self._total_asset - self.initial_capital) / self.initial_capital) * 100
             
@@ -646,8 +681,13 @@ class QQCTestEngine:
             print(f"  실제 매수 발생: {len(trades)}회")
             
             # 마지막 거래 상태
+            # 마지막 캔들에서 매수 조건을 만족하여 매수가 실행된 경우, 실제 거래 실행을 위해 'buy'로 설정
             if self._holding:
-                last_trade_status = 'hold'
+                # 마지막 캔들에서 매수가 실행된 경우 'buy', 그 외에는 'hold'
+                if last_pending_buy_executed or (len(trades) > 0 and trades[-1]['action'].startswith('BUY') and len(df) > 0 and trades[-1]['date'] == df.index[-1]):
+                    last_trade_status = 'buy'
+                else:
+                    last_trade_status = 'hold'
             elif len(trades) > 0:
                 last_trade = trades[-1]
                 if last_trade['action'].startswith('BUY'):

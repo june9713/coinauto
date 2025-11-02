@@ -4,6 +4,8 @@
 """
 import traceback
 import os
+import warnings
+import gc
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -11,11 +13,51 @@ matplotlib.use('Agg')  # 백엔드를 Agg로 설정하여 속도 향상
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib import font_manager
+from matplotlib import rc
+from matplotlib.ticker import FuncFormatter, LogFormatter
 from config import Config
+
+# matplotlib 폰트 관련 경고 억제
+warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
+# 폰트 glyph 관련 경고 억제
+warnings.filterwarnings('ignore', message=".*does not have a glyph for.*")
+
+# 전역 matplotlib 설정: mathtext 완전 비활성화, ASCII만 사용
+rc('axes', unicode_minus=False)  # 유니코드 마이너스 기호 대신 ASCII '-' 사용
+rc('text', usetex=False)  # LaTeX 완전 비활성화
+rc('font', **{'family': 'sans-serif'})
+
+# mathtext 파서를 완전히 비활성화 (수식 포맷터 사용 안 함)
+matplotlib.rcParams['axes.formatter.use_mathtext'] = False  # 수식 포맷터 사용 안 함
+matplotlib.rcParams['axes.unicode_minus'] = False  # 유니코드 마이너스 사용 안 함
+matplotlib.rcParams['mathtext.default'] = 'regular'  # mathtext 비활성화
+matplotlib.rcParams['text.usetex'] = False  # LaTeX 사용 안 함
+
+
+def safe_number_formatter(x, p):
+    """
+    안전한 숫자 포맷터 (NaN, inf, None 처리)
+    
+    Parameters:
+    - x: 포맷팅할 숫자
+    - p: matplotlib 포지션 파라미터 (사용하지 않음)
+    
+    Returns:
+    - str: 포맷팅된 문자열
+    """
+    try:
+        if x is None or (isinstance(x, float) and (np.isnan(x) or np.isinf(x))):
+            return ''
+        return f'{x:,.0f}'
+    except (ValueError, TypeError, OverflowError):
+        return ''
 
 
 class Visualizer:
     """백테스트 결과 시각화 클래스"""
+    
+    # 클래스 변수: 폰트 등록 여부 추적 (메모리 누수 방지)
+    _font_registered = set()
     
     def __init__(self, font_path=None, dpi=None):
         """
@@ -30,35 +72,41 @@ class Visualizer:
         self._setup_font()
     
     def _setup_font(self):
-        """한글 폰트 설정"""
+        """한글 폰트 설정 (중복 등록 방지)"""
         try:
             if os.path.exists(self.font_path):
-                # 폰트를 matplotlib에 등록
-                font_manager.fontManager.addfont(self.font_path)
+                # 폰트 경로를 키로 사용하여 중복 등록 방지
+                if self.font_path not in Visualizer._font_registered:
+                    # 폰트를 matplotlib에 등록
+                    font_manager.fontManager.addfont(self.font_path)
+                    Visualizer._font_registered.add(self.font_path)
+                
                 # 폰트 속성 가져오기
                 font_prop = font_manager.FontProperties(fname=self.font_path)
                 font_name = font_prop.get_name()
-                plt.rcParams['font.family'] = font_name
+                rc('font', family=font_name)
             else:
                 # 폰트 파일이 없으면 기본 폰트 사용 시도
                 print(f"경고: 폰트 파일을 찾을 수 없습니다: {self.font_path}")
-                plt.rcParams['font.family'] = 'DejaVu Sans'
+                rc('font', family='DejaVu Sans')
             # 유니코드 마이너스 기호 대신 ASCII 마이너스(-) 사용하여 경고 방지
-            plt.rcParams['axes.unicode_minus'] = False
+            rc('axes', unicode_minus=False)
         except Exception as e:
             err = traceback.format_exc()
             print("err", err)
             raise
     
-    def plot_backtest_results(self, df, result, save_path=None, 
+    def plot_backtest_results(self, df, result, save_path=None,
                              buy_threshold=None, sell_threshold=None,
                              volume_window=None, ma_window=None, volume_multiplier=None):
         """
         백테스트 결과를 matplotlib으로 시각화
-        
+
         Parameters:
         - df (pd.DataFrame): 추세선 계산이 완료된 OHLCV 데이터프레임
         - result (dict): 백테스트 결과 딕셔너리
+                        result['trades']는 현재 백테스트 결과 + 기존 백테스트 결과(이미지 출력 기간 내)를 병합한 거래 리스트
+                        이를 통해 과거 백테스트에서 발생한 거래도 현재 이미지에 함께 표시됨
         - save_path (str, optional): 그래프 저장 경로. None이면 Config 기본값 사용
         - buy_threshold (float, optional): 매수 기준선 각도. None이면 Config 기본값 사용
         - sell_threshold (float, optional): 매도 기준선 각도. None이면 Config 기본값 사용
@@ -76,7 +124,16 @@ class Visualizer:
             if sell_threshold is None:
                 sell_threshold = Config.DEFAULT_SELL_ANGLE_THRESHOLD
             
-            trades = result['trades']
+            # 데이터 검증
+            if df is None or len(df) == 0:
+                print(f"  경고: 데이터프레임이 비어있습니다. 그래프를 생성하지 않습니다.")
+                return
+            
+            if 'close' not in df.columns:
+                print(f"  경고: 'close' 컬럼이 없습니다. 그래프를 생성하지 않습니다.")
+                return
+            
+            trades = result.get('trades', [])
             
             # 각도 데이터가 있는지 확인
             has_angle_data = 'angle' in df.columns
@@ -141,10 +198,56 @@ class Visualizer:
             # 9. 누적 수익률 차트
             self._plot_cumulative_profit(axes[profit_ax_idx], trades)
             
-            plt.tight_layout(pad=1.0)  # pad 값 명시하여 계산 속도 향상
-            plt.savefig(save_path, dpi=self.dpi, bbox_inches='tight', facecolor='white')
-            print(f"\n그래프 저장 완료: {save_path}")
-            plt.close('all')  # 모든 figure 닫기하여 메모리 정리
+            # 모든 axes에 대해 unicode_minus=False 강제 설정 및 x축 날짜/시간 포맷팅
+            for ax in axes:
+                ax.tick_params(axis='both', which='major', labelsize=10)
+            
+            # x축 날짜/시간 포맷팅 (모든 차트에 공통 적용, sharex=True로 인해 마지막 차트에만 설정해도 모든 차트에 적용됨)
+            try:
+                if len(dates) > 0:
+                    # 마지막 차트에 날짜/시간 포맷 설정 (sharex=True로 인해 모든 차트에 적용)
+                    axes[profit_ax_idx].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M:%S'))
+                    axes[profit_ax_idx].xaxis.set_major_locator(mdates.AutoDateLocator())
+                    plt.setp(axes[profit_ax_idx].xaxis.get_majorticklabels(), rotation=45, ha='right')
+            except Exception as e:
+                # 날짜 포맷팅 실패 시 기본 포맷 사용
+                pass
+            
+            # tight_layout 안전하게 처리 (mathtext 파서 오류 방지)
+            try:
+                plt.tight_layout(pad=1.0)  # pad 값 명시하여 계산 속도 향상
+            except Exception as e:
+                # tight_layout 실패 시 figure를 먼저 draw하여 렌더러 초기화
+                print(f"  경고: tight_layout 실패, figure draw 후 저장: {e}")
+                fig.canvas.draw()  # 렌더러 초기화를 위해 명시적으로 draw 호출
+            
+            # 렌더러 초기화를 위해 figure를 한 번 그리기
+            try:
+                fig.canvas.draw()
+            except Exception as draw_error:
+                # draw 실패해도 저장 시도
+                print(f"  경고: figure draw 실패, 저장 시도: {draw_error}")
+            
+            # 파일 저장
+            try:
+                plt.savefig(save_path, dpi=self.dpi, bbox_inches='tight', facecolor='white', format='png')
+                # 저장 완료 확인
+                if os.path.exists(save_path):
+                    file_size = os.path.getsize(save_path)
+                    if file_size > 0:
+                        print(f"  그래프 저장 완료: {save_path} (크기: {file_size:,} bytes)")
+                    else:
+                        print(f"  경고: 저장된 파일이 비어있습니다: {save_path}")
+                else:
+                    print(f"  오류: 파일 저장 실패: {save_path}")
+            except Exception as save_error:
+                err = traceback.format_exc()
+                print(f"  오류: 그래프 저장 실패: {err}")
+                raise
+            
+            # 저장 완료 후 figure 닫기 (메모리 누수 방지)
+            plt.close(fig)
+            del fig  # 참조 제거
             
         except Exception as e:
             err = traceback.format_exc()
@@ -233,7 +336,7 @@ class Visualizer:
             ax.set_title('BTC 가격 및 매매 신호', fontsize=12, fontweight='bold')
             ax.legend(loc='best')
             ax.grid(True, alpha=0.3)
-            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.0f}'))
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
             
         except Exception as e:
             err = traceback.format_exc()
@@ -364,7 +467,7 @@ class Visualizer:
             ax.set_title('BTC 가격 (종가, 이동평균, 음봉/양봉)', fontsize=12, fontweight='bold')
             ax.legend(loc='best')
             ax.grid(True, alpha=0.3)
-            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.0f}'))
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
             
         except Exception as e:
             err = traceback.format_exc()
@@ -416,7 +519,24 @@ class Visualizer:
             ax.set_title('거래량 비교 (조건 B)', fontsize=12, fontweight='bold')
             ax.legend(loc='best')
             ax.grid(True, alpha=0.3)
+            # 로그 스케일 사용 시 수식 렌더링 문제 방지를 위해 커스텀 포맷터 사용
             ax.set_yscale('log')  # 거래량은 로그 스케일이 적합할 수 있음
+            # 로그 스케일의 수식 렌더링 문제 방지: mathtext를 사용하지 않는 포맷터 설정
+            def log_formatter(x, pos):
+                """로그 스케일용 안전한 포맷터 (수식 없이)"""
+                try:
+                    if x <= 0:
+                        return ''
+                    # 과학적 표기법 대신 일반 숫자로 표시
+                    if x >= 1e6:
+                        return f'{x/1e6:.1f}M'
+                    elif x >= 1e3:
+                        return f'{x/1e3:.1f}K'
+                    else:
+                        return f'{x:.2f}'
+                except:
+                    return ''
+            ax.yaxis.set_major_formatter(FuncFormatter(log_formatter))
             
         except Exception as e:
             err = traceback.format_exc()
@@ -489,7 +609,7 @@ class Visualizer:
             ax.set_title('조건 B 만족 구간 (거래량 >= 평균 * 배수)', fontsize=12, fontweight='bold')
             ax.legend(loc='best')
             ax.grid(True, alpha=0.3)
-            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.0f}'))
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
             
         except Exception as e:
             err = traceback.format_exc()
@@ -562,7 +682,7 @@ class Visualizer:
             ax.set_title('조건 D 만족 구간 (종가 > 이동평균)', fontsize=12, fontweight='bold')
             ax.legend(loc='best')
             ax.grid(True, alpha=0.3)
-            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.0f}'))
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
             
         except Exception as e:
             err = traceback.format_exc()
@@ -651,7 +771,7 @@ class Visualizer:
             ax.set_title('조건 E 만족 구간 (양봉: 오픈가 < 종가)', fontsize=12, fontweight='bold')
             ax.legend(loc='best')
             ax.grid(True, alpha=0.3)
-            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.0f}'))
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
             
         except Exception as e:
             err = traceback.format_exc()
@@ -743,7 +863,7 @@ class Visualizer:
             ax.set_title('B, D, E 조건 모두 일치하는 구간', fontsize=12, fontweight='bold')
             ax.legend(loc='best')
             ax.grid(True, alpha=0.3)
-            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.0f}'))
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
             
         except Exception as e:
             err = traceback.format_exc()
@@ -815,7 +935,7 @@ class Visualizer:
             ax.set_ylabel('가격 (원)', fontsize=10)
             ax.set_title('보유 구간', fontsize=12, fontweight='bold')
             ax.grid(True, alpha=0.3)
-            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.0f}'))
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
             
         except Exception as e:
             err = traceback.format_exc()
@@ -901,14 +1021,14 @@ class Visualizer:
             ax.set_ylabel('누적 수익 (원)', fontsize=10)
             ax.set_xlabel('날짜', fontsize=10)
             ax.set_title('누적 수익률', fontsize=12, fontweight='bold')
-            ax.legend(loc='best')
+            # legend는 라벨이 있는 아티스트가 있을 때만 표시
+            handles, labels = ax.get_legend_handles_labels()
+            if handles:
+                ax.legend(loc='best')
             ax.grid(True, alpha=0.3)
-            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{x:,.0f}'))
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
             
-            # x축 날짜 포맷팅
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-            ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-            plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+            # x축 날짜/시간 포맷팅은 plot_backtest_results 함수에서 공통으로 설정됨
             
         except Exception as e:
             err = traceback.format_exc()
@@ -964,11 +1084,13 @@ class Visualizer:
                                          buy_threshold=None, sell_threshold=None,
                                          volume_window=None, ma_window=None, volume_multiplier=None):
         """
-        여러 기간별 백테스트 결과 그래프 생성
-        
+        여러 기간별 백테스트 결과 그래프 생성 (순차 처리)
+
         Parameters:
         - df (pd.DataFrame): 추세선 계산이 완료된 OHLCV 데이터프레임
         - result (dict): 백테스트 결과 딕셔너리
+                        result['trades']는 현재 백테스트 결과 + 기존 백테스트 결과(이미지 출력 기간 내)를 병합한 거래 리스트
+                        이를 통해 과거 백테스트에서 발생한 거래도 현재 이미지에 함께 표시됨
         - base_dir (str): 이미지 저장 기본 디렉토리
         - buy_threshold (float, optional): 매수 기준선 각도. None이면 Config 기본값 사용
         - sell_threshold (float, optional): 매도 기준선 각도. None이면 Config 기본값 사용
@@ -991,38 +1113,49 @@ class Visualizer:
             # 마지막 날짜 기준
             last_date = df.index[-1]
             
+            # 작업 리스트 생성
+            tasks = []
+            
             # 1. 과거 3일 데이터
             days_3_start = last_date - pd.Timedelta(days=3)
             days_3_df, days_3_result = self._filter_data_by_period(df, result, start_date=days_3_start, end_date=last_date)
             if len(days_3_df) > 0:
-                save_path = os.path.join(base_dir, 'backtest_result_3days.png')
-                self.plot_backtest_results(days_3_df, days_3_result, save_path=save_path,
-                                         buy_threshold=buy_threshold, sell_threshold=sell_threshold,
-                                         volume_window=volume_window, ma_window=ma_window, volume_multiplier=volume_multiplier)
+                save_path = os.path.join(base_dir, 'backtest_result_3days.jpg')
+                tasks.append(('3일', days_3_df, days_3_result, save_path))
             
             # 2. 과거 5일 데이터
             days_5_start = last_date - pd.Timedelta(days=5)
             days_5_df, days_5_result = self._filter_data_by_period(df, result, start_date=days_5_start, end_date=last_date)
             if len(days_5_df) > 0:
-                save_path = os.path.join(base_dir, 'backtest_result_5days.png')
-                self.plot_backtest_results(days_5_df, days_5_result, save_path=save_path,
-                                         buy_threshold=buy_threshold, sell_threshold=sell_threshold,
-                                         volume_window=volume_window, ma_window=ma_window, volume_multiplier=volume_multiplier)
+                save_path = os.path.join(base_dir, 'backtest_result_5days.jpg')
+                tasks.append(('5일', days_5_df, days_5_result, save_path))
             
             # 3. 오늘 데이터 (마지막 날짜 하루)
             today_start = last_date.replace(hour=0, minute=0, second=0, microsecond=0)
             today_df, today_result = self._filter_data_by_period(df, result, start_date=today_start, end_date=last_date)
             if len(today_df) > 0:
-                save_path = os.path.join(base_dir, 'backtest_result_today.png')
-                self.plot_backtest_results(today_df, today_result, save_path=save_path,
-                                         buy_threshold=buy_threshold, sell_threshold=sell_threshold,
-                                         volume_window=volume_window, ma_window=ma_window, volume_multiplier=volume_multiplier)
+                save_path = os.path.join(base_dir, 'backtest_result_today.jpg')
+                tasks.append(('오늘', today_df, today_result, save_path))
             
-            # 4. 전체기간 데이터
-            save_path = os.path.join(base_dir, 'backtest_result_all.png')
-            self.plot_backtest_results(df, result, save_path=save_path,
-                                     buy_threshold=buy_threshold, sell_threshold=sell_threshold,
-                                     volume_window=volume_window, ma_window=ma_window, volume_multiplier=volume_multiplier)
+            # 순차적으로 그래프 생성
+            for period_name, period_df, period_result, save_path in tasks:
+                try:
+                    print(f"  → {period_name} 그래프 생성 중...")
+                    self.plot_backtest_results(
+                        period_df, period_result, save_path=save_path,
+                        buy_threshold=buy_threshold, sell_threshold=sell_threshold,
+                        volume_window=volume_window, ma_window=ma_window, volume_multiplier=volume_multiplier
+                    )
+                    print(f"  ✓ {period_name} 그래프 생성 완료: {save_path}")
+                except Exception as e:
+                    err = traceback.format_exc()
+                    print(f"  ✗ {period_name} 그래프 생성 실패: {err}")
+            
+            # 메모리 정리
+            plt.close('all')
+            gc.collect()
+            
+            print(f"\n모든 그래프 생성 완료 ({len(tasks)}개)")
             
         except Exception as e:
             err = traceback.format_exc()

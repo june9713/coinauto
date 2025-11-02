@@ -23,6 +23,7 @@ from visualizer import Visualizer
 from condition_manager import ConditionManager
 from trade_state import TradeStateManager
 from trader import Trader
+from shared_state import shared_state
 
 
 
@@ -125,12 +126,16 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         # 조건 기반 DataManager 초기화
         data_manager = DataManager(ticker=ticker, condition_dict=current_condition)
         
+        # 데이터 업데이트 전에 기존 데이터 존재 여부 확인 (중요: 순서가 중요함!)
+        # start_date가 None인 경우와 관계없이 항상 확인해야 함
+        print("\n[단계 1-0] 기존 데이터 존재 여부 확인 중...")
+        existing_df_before_update = data_manager.load_history_from_file()
+        
         # start_date가 None인 경우 저장된 데이터에서 첫 번째 날짜 확인
         if start_dt is None:
             print("\n데이터에서 첫 번째 날짜 확인 중...")
-            # 먼저 저장된 데이터 확인 (전체 다운로드 없이)
-            existing_df = data_manager.load_history_from_file()
-            existing_df_before_update = data_manager.load_history_from_file()
+            # 이미 로드한 existing_df_before_update 사용
+            existing_df = existing_df_before_update
             if existing_df is not None and len(existing_df) > 0:
                 # 저장된 데이터가 있으면 첫 번째 날짜를 시작 날짜로 사용
                 start_dt = existing_df.index[0]
@@ -156,10 +161,6 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         else:
             print(" ~ (마지막)")
         
-        # 데이터 업데이트 전에 기존 데이터 존재 여부 확인 (중요: 순서가 중요함!)
-        #print("\n[단계 1-0] 기존 데이터 존재 여부 확인 중...")
-        #existing_df_before_update = data_manager.load_history_from_file()
-        
         if existing_df_before_update is not None and len(existing_df_before_update) > 0:
             print(f"  ✓ 기존 데이터 발견: {len(existing_df_before_update)}개 데이터")
             print(f"  기존 데이터 기간: {existing_df_before_update.index[0]} ~ {existing_df_before_update.index[-1]}")
@@ -183,14 +184,15 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         print(f"수집 완료: {len(df)}개 데이터")
         print(f"전체 기간: {df.index[0]} ~ {df.index[-1]}")
         
-        # 원본 데이터 보관 (기간별 그래프 생성을 위해)
-        original_df_for_backtest = df.copy()
-        
         # 필터링 (시작 날짜 및 종료 날짜)
         original_count = len(df)
         df = df[df.index >= start_dt]
         if end_dt is not None:
             df = df[df.index <= end_dt]
+        
+        # 원본 데이터 보관 (기간별 그래프 생성을 위해) - 필터링 후 복사로 메모리 절약
+        # 참고: 그래프 생성에 필요하므로 복사는 필수이며, 필터링 후 복사하면 메모리 사용량 감소
+        original_df_for_backtest = df.copy()
         
         filtered_count = len(df)
         
@@ -211,6 +213,7 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
             print(f"  → 전체 백테스트 모드: 기존 데이터가 없었으므로 전체 데이터로 백테스트 실행")
             print(f"  전체 다운로드된 데이터: {len(df)}개 데이터")
             print(f"  백테스트 기간: {df.index[0]} ~ {df.index[-1]}")
+            # 참고: 백테스트 엔진이 데이터를 수정하지 않으므로 view 사용 가능하나, 안전을 위해 복사 유지
             df_for_backtest = df.copy()  # 복사본 사용
         else:
             # 마지막 56개만 사용 (과거 55개 + 현재 1개)
@@ -285,20 +288,98 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         reporter = ResultReporter()
         reporter.print_backtest_results(result)
         
-        # 그래프 생성 (전체 데이터 포함한 df 사용)
-        print("\n[단계 4] 백테스트 결과 그래프 생성 중...")
-        visualizer = Visualizer()
-        visualizer.plot_backtest_results(
-            original_df_for_backtest, result,
-            buy_threshold=0,  # QQC 전략은 각도 기준이 아니므로 0으로 설정
-            sell_threshold=0,
-            volume_window=volume_window_val,
-            ma_window=ma_window_val,
-            volume_multiplier=volume_multiplier_val
-        )
-        
+        # 기간별 그래프 생성 전에 기존 백테스트 결과 로드
+        print("\n[단계 4-1] 기존 백테스트 결과 로드 중...")
+        historical_results_df = data_manager.load_backtest_results(ticker=ticker, condition_dict=current_condition)
+
+        # 기존 거래 내역을 result['trades']와 병합
+        if historical_results_df is not None and len(historical_results_df) > 0:
+            print(f"  기존 백테스트 결과: {len(historical_results_df)}개 기록 발견")
+
+            # historical_results_df에서 trade_date가 있는 행만 추출
+            historical_trades_df = historical_results_df[historical_results_df['trade_date'].notna()].copy()
+
+            if len(historical_trades_df) > 0:
+                # trade_date를 datetime으로 변환
+                historical_trades_df['trade_date'] = pd.to_datetime(historical_trades_df['trade_date'])
+
+                # 이미지 출력 기간 내의 거래만 필터링 (original_df_for_backtest 범위)
+                if len(original_df_for_backtest) > 0:
+                    backtest_start_date = original_df_for_backtest.index[0]
+                    backtest_end_date = original_df_for_backtest.index[-1]
+
+                    # 이미지 출력 기간 내의 거래만 선택
+                    historical_trades_df = historical_trades_df[
+                        (historical_trades_df['trade_date'] >= backtest_start_date) &
+                        (historical_trades_df['trade_date'] <= backtest_end_date)
+                    ]
+
+                    if len(historical_trades_df) > 0:
+                        print(f"  이미지 출력 기간 내 기존 거래: {len(historical_trades_df)}개")
+
+                        # 기존 거래를 result['trades'] 형식으로 변환
+                        historical_trades = []
+                        for _, row in historical_trades_df.iterrows():
+                            trade = {
+                                'date': row['trade_date'],
+                                'action': row.get('action', ''),
+                                'price': row.get('trade_price', None),
+                                'amount': row.get('trade_amount', None),
+                                'total_value': row.get('trade_total_value', None),
+                                'buy_price': row.get('buy_price', None),
+                                'buy_date': pd.to_datetime(row['buy_date']) if pd.notna(row.get('buy_date')) else None,
+                                'profit': row.get('profit', None),
+                                'profit_percent': row.get('profit_percent', None),
+                                'volume_a': row.get('volume_a', None),
+                                'ma_c': row.get('ma_c', None),
+                                'total_asset': row.get('total_asset_after_trade', None)
+                            }
+                            historical_trades.append(trade)
+
+                        # 현재 백테스트 결과의 거래와 병합
+                        current_trades = result.get('trades', [])
+
+                        # 중복 제거: trade_date와 action이 같은 거래는 현재 백테스트 결과 우선
+                        # 현재 백테스트의 거래 날짜 집합
+                        current_trade_keys = set()
+                        for trade in current_trades:
+                            trade_date = trade['date']
+                            if isinstance(trade_date, str):
+                                trade_date = pd.to_datetime(trade_date)
+                            action = trade.get('action', '')
+                            current_trade_keys.add((trade_date, action))
+
+                        # 기존 거래 중 현재 백테스트에 없는 거래만 추가
+                        for trade in historical_trades:
+                            trade_date = trade['date']
+                            if isinstance(trade_date, str):
+                                trade_date = pd.to_datetime(trade_date)
+                            action = trade.get('action', '')
+                            if (trade_date, action) not in current_trade_keys:
+                                current_trades.append(trade)
+
+                        # 날짜순으로 정렬
+                        current_trades.sort(key=lambda t: pd.to_datetime(t['date']) if isinstance(t['date'], str) else t['date'])
+
+                        # 병합된 거래 리스트를 result에 저장
+                        result['trades'] = current_trades
+                        result['total_trades'] = len(current_trades)
+                        result['buy_count'] = len([t for t in current_trades if t['action'].startswith('BUY')])
+                        result['sell_count'] = len([t for t in current_trades if t['action'].startswith('SELL')])
+
+                        print(f"  총 거래 병합 완료: {len(current_trades)}개 (기존 {len(historical_trades)}개 + 현재 백테스트)")
+                    else:
+                        print(f"  이미지 출력 기간 내 기존 거래 없음")
+                else:
+                    print(f"  백테스트 데이터가 비어있어 기존 거래 병합 생략")
+            else:
+                print(f"  기존 백테스트 결과에 거래 내역 없음")
+        else:
+            print(f"  기존 백테스트 결과 없음")
+
         # 기간별 그래프 생성
-        print("\n[단계 4-1] 기간별 백테스트 결과 그래프 생성 중...")
+        print("\n[단계 4-2] 기간별 백테스트 결과 그래프 생성 중...")
+        visualizer = Visualizer()
         visualizer.plot_backtest_results_by_periods(
             original_df_for_backtest, result,
             base_dir='./images',
@@ -308,6 +389,38 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
             ma_window=ma_window_val,
             volume_multiplier=volume_multiplier_val
         )
+        
+        # 서버 모드인 경우 공유 상태 업데이트
+        try:
+            images_dir = os.path.join(os.getcwd(), 'images')
+            image_today = os.path.join(images_dir, 'backtest_result_today.jpg')
+            image_3days = os.path.join(images_dir, 'backtest_result_3days.jpg')
+            image_5days = os.path.join(images_dir, 'backtest_result_5days.jpg')
+            
+            # 절대 경로로 변환
+            if os.path.exists(image_today):
+                image_today = os.path.abspath(image_today)
+            else:
+                image_today = None
+                
+            if os.path.exists(image_3days):
+                image_3days = os.path.abspath(image_3days)
+            else:
+                image_3days = None
+                
+            if os.path.exists(image_5days):
+                image_5days = os.path.abspath(image_5days)
+            else:
+                image_5days = None
+            
+            shared_state.update_image_paths(
+                today=image_today,
+                days_3=image_3days,
+                days_5=image_5days
+            )
+            shared_state.update_backtest_result(result, result.get('trades', []))
+        except Exception as e:
+            print(f"경고: 공유 상태 업데이트 실패: {str(e)}")
         
         # 백테스트 결과 저장
         print("\n[단계 5] 백테스트 결과 저장 중...")
@@ -545,6 +658,173 @@ def execute_real_trade(trader, ticker, backtest_status, prev_status, state, buy_
         return False
 
 
+def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None,
+                    price_slippage=None, ticker='BTC', interval='24h',
+                    volume_window=None, ma_window=None, volume_multiplier=None,
+                    buy_cash_ratio=None, hold_period=None, profit_target=None,
+                    stop_loss=None, auto_initialize=True):
+    """
+    서버 모드로 백테스트 실행 (입력 없이 자동 실행)
+    
+    Parameters:
+    - auto_initialize (bool): True면 저장된 상태가 없을 때 자동 초기화
+    """
+    try:
+        print("="*80)
+        print("QQC 백테스트 및 자동 거래 시스템 (서버 모드)")
+        print("="*80)
+        
+        shared_state.set_running(True)
+        shared_state.set_error(None)
+        
+        saved_state = TradeStateManager.load_state()
+        
+        if saved_state is None:
+            if auto_initialize:
+                print("\n저장된 거래 상태가 없습니다. 자동 초기화합니다.")
+                try:
+                    trader = Trader()
+                    balance = trader.get_balance(ticker)
+                    actual_cash = balance['cash']
+                    actual_coin = balance['coin']
+                    
+                    print(f"\n현재 계좌 상태:")
+                    print(f"  현금 잔고: {actual_cash:,.0f}원")
+                    print(f"  코인 보유량: {actual_coin:.8f} {ticker}")
+                    
+                    initial_capital = actual_cash
+                    state = TradeStateManager.create_initial_state(
+                        initial_capital=initial_capital,
+                        actual_cash=actual_cash,
+                        actual_coin_amount=actual_coin,
+                        ticker=ticker
+                    )
+                    state['last_backtest_status'] = 'none'
+                    TradeStateManager.save_state(state)
+                    saved_state = state
+                    
+                    print(f"\n초기화 완료:")
+                    print(f"  초기 자본: {initial_capital:,.0f}원")
+                    
+                    # 공유 상태 업데이트
+                    shared_state.update_trade_state(state)
+                    
+                except Exception as e:
+                    err = traceback.format_exc()
+                    print("err", err)
+                    print("\n오류: 초기화 실패. 기본값으로 진행합니다.")
+                    initial_capital = initial_capital or Config.DEFAULT_INITIAL_CAPITAL
+                    saved_state = None
+                    shared_state.set_error(f"초기화 실패: {str(e)}")
+            else:
+                print("\n저장된 거래 상태가 없고 자동 초기화가 비활성화되었습니다.")
+                initial_capital = initial_capital or Config.DEFAULT_INITIAL_CAPITAL
+                saved_state = None
+        else:
+            print("\n이전 거래 상태를 불러왔습니다.")
+            initial_capital = saved_state.get('initial_capital', initial_capital or Config.DEFAULT_INITIAL_CAPITAL)
+            shared_state.update_trade_state(saved_state)
+        
+        # QQC 전략 변수 설정 (기본값 적용)
+        volume_window_val = volume_window if volume_window is not None else 55
+        ma_window_val = ma_window if ma_window is not None else 9
+        volume_multiplier_val = volume_multiplier if volume_multiplier is not None else 1.4
+        buy_cash_ratio_val = buy_cash_ratio if buy_cash_ratio is not None else 0.9
+        hold_period_val = hold_period if hold_period is not None else 15
+        profit_target_val = profit_target if profit_target is not None else 17.6
+        stop_loss_val = stop_loss if stop_loss is not None else -28.6
+        price_slip_val = price_slippage or Config.DEFAULT_PRICE_SLIPPAGE
+        
+        # interval 의 갱신 주기의 갱신 시점에서 백테스트가 시작할 수 있도록 현재 시간 기준으로 갱신시간까지 대기
+        wait_start(interval)
+        print("백테스트 시작")
+        
+        # Trader 객체 생성 (실제 거래용)
+        trader = None
+        try:
+            trader = Trader()
+        except Exception as e:
+            print(f"경고: 실제 거래 기능 초기화 실패: {str(e)}")
+            print("백테스트만 실행됩니다.")
+        
+        while shared_state.is_running:
+            try:
+                testresult = main(
+                    start_date=start_date,
+                    end_date=end_date,
+                    initial_capital=initial_capital,
+                    price_slippage=price_slip_val,
+                    ticker=ticker,
+                    interval=interval,
+                    volume_window=volume_window_val,
+                    ma_window=ma_window_val,
+                    volume_multiplier=volume_multiplier_val,
+                    buy_cash_ratio=buy_cash_ratio_val,
+                    hold_period=hold_period_val,
+                    profit_target=profit_target_val,
+                    stop_loss=stop_loss_val
+                )
+                
+                # 백테스트 결과 처리
+                if isinstance(testresult, dict):
+                    backtest_status = testresult.get('last_trade_status', 'unknown')
+                    print(f"\n백테스트 결과 상태: {backtest_status}")
+                    
+                    # 상태 업데이트 및 실제 거래 실행
+                    if saved_state is not None and trader is not None:
+                        prev_status = saved_state.get('last_backtest_status', 'none')
+                        
+                        # 실제 거래 실행
+                        trade_executed = execute_real_trade(
+                            trader=trader,
+                            ticker=ticker,
+                            backtest_status=backtest_status,
+                            prev_status=prev_status,
+                            state=saved_state,
+                            buy_cash_ratio=buy_cash_ratio_val
+                        )
+                        
+                        # 상태 업데이트
+                        saved_state['last_backtest_status'] = backtest_status
+                        saved_state['last_update'] = pd.Timestamp.now()
+                        
+                        # 실제 잔고 재조회 및 업데이트
+                        try:
+                            balance = trader.get_balance(ticker)
+                            saved_state['actual_cash'] = balance['cash']
+                            saved_state['actual_coin_amount'] = balance['coin']
+                        except Exception as e:
+                            print(f"경고: 잔고 조회 실패: {str(e)}")
+                        
+                        TradeStateManager.save_state(saved_state)
+                        shared_state.update_trade_state(saved_state)
+                    else:
+                        if saved_state is None:
+                            print("\n경고: 거래 상태가 저장되지 않았습니다. 실제 거래를 실행하지 않습니다.")
+                        if trader is None:
+                            print("\n경고: 실제 거래 기능이 사용 불가능합니다. 백테스트만 실행됩니다.")
+                else:
+                    print(f"last_trade_status: {testresult}")
+                
+                wait_start(interval)
+                
+            except Exception as e:
+                err = traceback.format_exc()
+                print("err", err)
+                shared_state.set_error(err)
+                # 오류 발생해도 계속 실행
+                wait_start(interval)
+        
+        print("서버 모드 종료")
+        
+    except Exception as e:
+        err = traceback.format_exc()
+        print("err", err)
+        shared_state.set_error(err)
+        shared_state.set_running(False)
+        raise
+
+
 if __name__ == "__main__":
     # 시작 날짜 설정 (기본값: 2014-01-01)
     start_date = None  # '2014-01-01'
@@ -573,9 +853,9 @@ if __name__ == "__main__":
     
     if saved_state is None:
         print("\n저장된 거래 상태가 없습니다.")
-        initialize = input("초기화하시겠습니까? (y/n): ").strip().lower()
+        initialize = ''#input("초기화하시겠습니까? (y/n): ").strip().lower()
         
-        if initialize == 'y':
+        if True:#initialize in 'yㅛ':
             print("\n초기화 모드: 실제 계좌 잔고를 조회하여 초기 자본으로 설정합니다.")
             try:
                 trader = Trader()
@@ -615,9 +895,9 @@ if __name__ == "__main__":
             saved_state = None
     else:
         print("\n이전 거래 상태를 불러왔습니다.")
-        initialize = input("초기화하시겠습니까? (y/n): ").strip().lower()
+        initialize = ''#input("초기화하시겠습니까? (y/n): ").strip().lower()
         
-        if initialize == 'y':
+        if True:#initialize == 'y':
             print("\n초기화 모드: 실제 계좌 잔고를 조회하여 초기 자본으로 설정합니다.")
             try:
                 trader = Trader()
@@ -655,7 +935,7 @@ if __name__ == "__main__":
     
     # interval 의 갱신 주기의 갱신 시점에서 백테스트가 시작할 수 있도록 현재 시간 기준으로 갱신시간까지 대기
     # 모든 interval 시간의 대기 시간을 계산하여 대기함
-    wait_start("3m")
+    wait_start(interval)
     print("백테스트 시작")
     
     # Trader 객체 생성 (실제 거래용)
@@ -724,5 +1004,5 @@ if __name__ == "__main__":
         else:
             print(f"last_trade_status: {testresult}")
         
-        wait_start("3m")
+        wait_start(interval)
 
