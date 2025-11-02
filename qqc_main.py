@@ -14,6 +14,9 @@ from qqc_test import QQCTestEngine
 from result_reporter import ResultReporter
 from visualizer import Visualizer
 from condition_manager import ConditionManager
+from trade_state import TradeStateManager
+from trader import Trader
+
 
 
 def main(start_date='2014-01-01', end_date=None, initial_capital=None,
@@ -120,6 +123,7 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
             print("\n데이터에서 첫 번째 날짜 확인 중...")
             # 먼저 저장된 데이터 확인 (전체 다운로드 없이)
             existing_df = data_manager.load_history_from_file()
+            existing_df_before_update = data_manager.load_history_from_file()
             if existing_df is not None and len(existing_df) > 0:
                 # 저장된 데이터가 있으면 첫 번째 날짜를 시작 날짜로 사용
                 start_dt = existing_df.index[0]
@@ -144,6 +148,20 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
             print(f" ~ {end_dt.strftime('%Y-%m-%d')}")
         else:
             print(" ~ (마지막)")
+        
+        # 데이터 업데이트 전에 기존 데이터 존재 여부 확인 (중요: 순서가 중요함!)
+        #print("\n[단계 1-0] 기존 데이터 존재 여부 확인 중...")
+        #existing_df_before_update = data_manager.load_history_from_file()
+        
+        if existing_df_before_update is not None and len(existing_df_before_update) > 0:
+            print(f"  ✓ 기존 데이터 발견: {len(existing_df_before_update)}개 데이터")
+            print(f"  기존 데이터 기간: {existing_df_before_update.index[0]} ~ {existing_df_before_update.index[-1]}")
+            print(f"  → 증분 업데이트 후 마지막 56개만 백테스트 실행 예정")
+            is_full_backtest = False
+        else:
+            print(f"  ✗ 기존 데이터 없음 (None 또는 빈 데이터)")
+            print(f"  → 전체 데이터 다운로드 후 전체 백테스트 실행 예정")
+            is_full_backtest = True
         
         # 데이터 업데이트 (저장된 데이터가 있으면 마지막 날짜 이후부터만 조회)
         print("\n[단계 1] 데이터 수집 중...")
@@ -176,6 +194,37 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         print(f"백테스트 대상: {filtered_count}개 데이터 (제외: {original_count - filtered_count}개)")
         print(f"백테스트 기간: {df.index[0]} ~ {df.index[-1]}")
         
+        # 백테스트 데이터 선택 로직
+        # - 기존 데이터가 없었던 경우 (전체 다운로드): 전체 데이터로 백테스트
+        # - 기존 데이터가 있었던 경우 (증분 업데이트): 마지막 56개만 사용
+        print(f"\n[백테스트 데이터 선택]")
+        print(f"  is_full_backtest 플래그: {is_full_backtest}")
+        if is_full_backtest:
+            # 전체 데이터로 백테스트 실행
+            print(f"  → 전체 백테스트 모드: 기존 데이터가 없었으므로 전체 데이터로 백테스트 실행")
+            print(f"  전체 다운로드된 데이터: {len(df)}개 데이터")
+            print(f"  백테스트 기간: {df.index[0]} ~ {df.index[-1]}")
+            df_for_backtest = df.copy()  # 복사본 사용
+        else:
+            # 마지막 56개만 사용 (과거 55개 + 현재 1개)
+            # qqc_55.py와 동일한 로직: 마지막 57개 추출 후 마지막 1개 제외하여 56개 사용
+            required_count = volume_window_val + 2  # 57개 필요
+            if len(df) < required_count:
+                print(f"\n경고: 데이터가 부족합니다 (필요: 최소 {required_count}개, 현재: {len(df)}개)")
+                print("전체 데이터를 사용하여 백테스트를 실행합니다.")
+                df_for_backtest = df
+            else:
+                # 마지막 57개를 추출한 후, 마지막 1개를 제외하여 56개 사용
+                df_last_57 = df.tail(required_count)
+                df_for_backtest = df_last_57.iloc[:-1]  # 마지막 인덱스 제외
+                
+                print(f"  → 부분 백테스트 모드: 기존 데이터가 있어서 마지막 56개만 백테스트 실행")
+                print(f"  백테스트 실행 데이터: 마지막 {required_count}개 추출 후 마지막 1개 제외 → {len(df_for_backtest)}개 사용")
+                print(f"  백테스트 실행 기간: {df_for_backtest.index[0]} ~ {df_for_backtest.index[-1]}")
+                print(f"    - 인덱스 0-{volume_window_val-1}: 과거 평균용 ({volume_window_val}개)")
+                print(f"    - 인덱스 {volume_window_val}: 현재 캔들")
+                print(f"    - 실제 데이터의 마지막 캔들(인덱스 {required_count-1})은 제외됨")
+        
         # QQC 백테스트 실행
         print("\n[단계 2] QQC 백테스트 실행 중...")
         print(f"초기 자본: {initial_cap_val:,.0f}원")
@@ -203,7 +252,26 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
             stop_loss=stop_loss_val
         )
         
-        result = qqc_engine.run(df)
+        # 백테스트 실행
+        print(f"\n[백테스트 실행] 실제 사용 데이터: {len(df_for_backtest)}개")
+        print(f"  실행 기간: {df_for_backtest.index[0]} ~ {df_for_backtest.index[-1]}")
+        result = qqc_engine.run(df_for_backtest)
+        
+        # 백테스트 결과에서 마지막 거래 상태 확인
+        last_trade_status = result.get('last_trade_status', 'unknown')
+        
+        # 전체 백테스트인 경우 확인 로그
+        if is_full_backtest:
+            print(f"\n[전체 백테스트 확인]")
+            print(f"  백테스트 실행 데이터: {len(df_for_backtest)}개")
+            print(f"  총 거래 횟수: {result.get('total_trades', 0)}회")
+            print(f"  초기 자본: {result.get('initial_capital', 0):,.0f}원")
+            print(f"  최종 자산: {result.get('final_asset', 0):,.0f}원")
+            print(f"  총 수익률: {result.get('total_return', 0):+.2f}%")
+        
+        # 실제 거래 실행 로직
+        # 초기화 여부는 main 함수 호출 전에 확인하므로 여기서는 실행만
+        # 실제 거래 실행은 main 함수 외부에서 처리 (상태 확인 후)
         
         # 결과 출력
         print("\n[단계 3] 백테스트 결과 출력 중...")
@@ -236,11 +304,20 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         
         # 백테스트 결과 저장
         print("\n[단계 5] 백테스트 결과 저장 중...")
+        if is_full_backtest:
+            print(f"  전체 백테스트 결과를 폴더별/시간단위별로 저장합니다.")
+            print(f"  저장 대상 데이터: 백테스트에 사용된 {len(df_for_backtest)}개 데이터")
+        else:
+            print(f"  증분 백테스트 결과를 저장합니다.")
+            print(f"  저장 대상 데이터: 백테스트에 사용된 {len(df_for_backtest)}개 데이터")
+        
+        # 저장 시 백테스트에 사용된 데이터(df_for_backtest)를 전달
+        # 전체 백테스트일 때는 전체 데이터, 증분 백테스트일 때는 마지막 56개
         data_manager.save_qqc_backtest_result(
-            df=df,
+            df=df_for_backtest,  # 백테스트에 사용된 데이터를 그대로 전달
             result=result,
-            test_start_date=start_dt,
-            test_end_date=end_dt,
+            test_start_date=df_for_backtest.index[0] if len(df_for_backtest) > 0 else start_dt,
+            test_end_date=df_for_backtest.index[-1] if len(df_for_backtest) > 0 else end_dt,
             volume_window=volume_window_val,
             ma_window=ma_window_val,
             volume_multiplier=volume_multiplier_val,
@@ -256,8 +333,13 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         
         print("\nQQC 백테스트 완료!")
         
-        # 마지막 거래 상태 반환
-        return result.get('last_trade_status', 'unknown')
+        # 마지막 거래 상태와 결과 반환 (실제 거래 실행을 위해)
+        return {
+            'last_trade_status': result.get('last_trade_status', 'unknown'),
+            'result': result,
+            'trades': result.get('trades', []),
+            'final_asset': result.get('final_asset', initial_cap_val)
+        }
         
     except Exception as e:
         err = traceback.format_exc()
@@ -364,16 +446,104 @@ def wait_start(interval):
         left_seconds -= 1
         print(f"대기 시간: {left_seconds//3600}시간 {left_seconds%3600//60}분 {left_seconds%60}초 남음", end='\r')
 
+def execute_real_trade(trader, ticker, backtest_status, prev_status, state, buy_cash_ratio):
+    """
+    실제 거래 실행
+    
+    Parameters:
+    - trader: Trader 객체
+    - ticker: 암호화폐 티커
+    - backtest_status: 백테스트 결과 상태 ('buy', 'sell', 'hold', 'none', 'wait')
+    - prev_status: 이전 상태
+    - state: 현재 저장된 상태
+    - buy_cash_ratio: 매수시 사용할 현금 비율
+    
+    Returns:
+    - bool: 거래 실행 여부
+    """
+    try:
+        # 초기화 직후 첫 백테스트에서 홀드/매도 상태면 실제 거래 안 함
+        if state.get('last_backtest_status') == 'none' and backtest_status in ['hold', 'sell']:
+            print(f"\n[실제 거래] 초기화 직후 홀드/매도 상태로 실제 거래 생략")
+            print(f"  백테스트 상태: {backtest_status} (실제로는 코인 미보유 상태)")
+            return False
+        
+        # 실제 자산 상태 확인
+        balance = trader.get_balance(ticker)
+        actual_cash = balance['cash']
+        actual_coin = balance['coin']
+        
+        # 상태 매핑:
+        # - 'buy', 'none', 'wait': 코인 미보유, 현금 보유 상태
+        # - 'hold', 'sell': 코인 보유, 현금은 잔액만 보유 상태
+        
+        # 매수 조건: 백테스트에서 매수가 발생하고, 실제로 코인 미보유 상태인 경우
+        if backtest_status == 'buy' and prev_status in ['none', 'wait', 'sell']:
+            if actual_coin > 0:
+                print(f"\n[실제 거래] 매수 생략: 이미 코인 보유 중 ({actual_coin:.8f} {ticker})")
+                return False
+            
+            # 실제 매수 실행
+            print(f"\n[실제 거래] 매수 실행")
+            print(f"  백테스트 상태: {prev_status} -> {backtest_status}")
+            print(f"  현재 현금: {actual_cash:,.0f}원")
+            print(f"  사용할 현금 비율: {buy_cash_ratio*100:.0f}%")
+            
+            order_result = trader.buy_market_order(
+                ticker=ticker,
+                cash_ratio=buy_cash_ratio
+            )
+            
+            if order_result['success']:
+                print(f"  ✓ 매수 성공: 주문 ID {order_result['order_id']}")
+                print(f"    매수 수량: {order_result['amount']:.8f} {ticker}")
+                print(f"    매수 가격: {order_result['price']:,.0f}원")
+            else:
+                print(f"  ✗ 매수 실패: {order_result['message']}")
+            
+            return order_result['success']
+        
+        # 매도 조건: 백테스트에서 매도가 발생하고, 실제로 코인 보유 상태인 경우
+        elif backtest_status == 'sell' and prev_status in ['hold', 'buy']:
+            if actual_coin <= 0:
+                print(f"\n[실제 거래] 매도 생략: 코인 미보유 상태")
+                return False
+            
+            # 실제 매도 실행
+            print(f"\n[실제 거래] 매도 실행")
+            print(f"  백테스트 상태: {prev_status} -> {backtest_status}")
+            print(f"  현재 코인 보유량: {actual_coin:.8f} {ticker}")
+            
+            order_result = trader.sell_market_order(
+                ticker=ticker,
+                coin_amount=actual_coin  # 전체 매도
+            )
+            
+            if order_result['success']:
+                print(f"  ✓ 매도 성공: 주문 ID {order_result['order_id']}")
+                print(f"    매도 수량: {order_result['amount']:.8f} {ticker}")
+                print(f"    매도 가격: {order_result['price']:,.0f}원")
+            else:
+                print(f"  ✗ 매도 실패: {order_result['message']}")
+            
+            return order_result['success']
+        
+        else:
+            # 거래 불필요한 상태 변화
+            return False
+            
+    except Exception as e:
+        err = traceback.format_exc()
+        print("err", err)
+        return False
+
+
 if __name__ == "__main__":
     # 시작 날짜 설정 (기본값: 2014-01-01)
     start_date = None  # '2014-01-01'
     
     # 종료 날짜 설정 (None이면 마지막까지 사용)
     end_date = None  # 예: '2023-12-31'
-    
-    
-    # 시작 잔고 설정 (기본값: 1,000,000원)
-    initial_capital = 1_000_000  # 예: 10000000 (1천만원)
     
     # QQC 전략 변수 설정
     volume_window = 55  # 거래량 평균 계산용 윈도우
@@ -386,13 +556,109 @@ if __name__ == "__main__":
     ticker = 'BTC'
     interval = '3m'
     price_slippage = 1000
-
-
-    #interval 의 갱신 주기의 갱신 시점에서 백테스트가 시작할 수 있도록 현재 시간 기준으로 갱신시간까지 대기
-
-    #모든 interval 시간의 대기 시간을 계산하여 대기함
+    
+    # 초기화 여부 확인
+    print("="*80)
+    print("QQC 백테스트 및 자동 거래 시스템")
+    print("="*80)
+    
+    saved_state = TradeStateManager.load_state()
+    
+    if saved_state is None:
+        print("\n저장된 거래 상태가 없습니다.")
+        initialize = input("초기화하시겠습니까? (y/n): ").strip().lower()
+        
+        if initialize == 'y':
+            print("\n초기화 모드: 실제 계좌 잔고를 조회하여 초기 자본으로 설정합니다.")
+            try:
+                trader = Trader()
+                balance = trader.get_balance(ticker)
+                actual_cash = balance['cash']
+                actual_coin = balance['coin']
+                
+                print(f"\n현재 계좌 상태:")
+                print(f"  현금 잔고: {actual_cash:,.0f}원")
+                print(f"  코인 보유량: {actual_coin:.8f} {ticker}")
+                
+                # 초기 상태 저장
+                initial_capital = actual_cash  # 실제 현금 잔고를 초기 자본으로 사용
+                state = TradeStateManager.create_initial_state(
+                    initial_capital=initial_capital,
+                    actual_cash=actual_cash,
+                    actual_coin_amount=actual_coin,
+                    ticker=ticker
+                )
+                state['last_backtest_status'] = 'none'  # 초기 상태는 'none'
+                TradeStateManager.save_state(state)
+                
+                print(f"\n초기화 완료:")
+                print(f"  초기 자본: {initial_capital:,.0f}원")
+                print(f"  실제 현금: {actual_cash:,.0f}원")
+                print(f"  실제 코인: {actual_coin:.8f} {ticker}")
+                
+            except Exception as e:
+                err = traceback.format_exc()
+                print("err", err)
+                print("\n오류: 초기화 실패. 기본값으로 진행합니다.")
+                initial_capital = Config.DEFAULT_INITIAL_CAPITAL
+                saved_state = None
+        else:
+            print("\n초기화하지 않습니다. 기본값으로 진행합니다.")
+            initial_capital = Config.DEFAULT_INITIAL_CAPITAL
+            saved_state = None
+    else:
+        print("\n이전 거래 상태를 불러왔습니다.")
+        initialize = input("초기화하시겠습니까? (y/n): ").strip().lower()
+        
+        if initialize == 'y':
+            print("\n초기화 모드: 실제 계좌 잔고를 조회하여 초기 자본으로 설정합니다.")
+            try:
+                trader = Trader()
+                balance = trader.get_balance(ticker)
+                actual_cash = balance['cash']
+                actual_coin = balance['coin']
+                
+                print(f"\n현재 계좌 상태:")
+                print(f"  현금 잔고: {actual_cash:,.0f}원")
+                print(f"  코인 보유량: {actual_coin:.8f} {ticker}")
+                
+                # 초기 상태 저장
+                initial_capital = actual_cash
+                state = TradeStateManager.create_initial_state(
+                    initial_capital=initial_capital,
+                    actual_cash=actual_cash,
+                    actual_coin_amount=actual_coin,
+                    ticker=ticker
+                )
+                state['last_backtest_status'] = 'none'
+                TradeStateManager.save_state(state)
+                saved_state = state
+                
+                print(f"\n초기화 완료:")
+                print(f"  초기 자본: {initial_capital:,.0f}원")
+                
+            except Exception as e:
+                err = traceback.format_exc()
+                print("err", err)
+                print("\n오류: 초기화 실패. 이전 상태를 유지합니다.")
+                initial_capital = saved_state.get('initial_capital', Config.DEFAULT_INITIAL_CAPITAL)
+        else:
+            print("\n이전 거래를 계속합니다.")
+            initial_capital = saved_state.get('initial_capital', Config.DEFAULT_INITIAL_CAPITAL)
+    
+    # interval 의 갱신 주기의 갱신 시점에서 백테스트가 시작할 수 있도록 현재 시간 기준으로 갱신시간까지 대기
+    # 모든 interval 시간의 대기 시간을 계산하여 대기함
     wait_start("3m")
     print("백테스트 시작")
+    
+    # Trader 객체 생성 (실제 거래용)
+    trader = None
+    try:
+        trader = Trader()
+    except Exception as e:
+        print(f"경고: 실제 거래 기능 초기화 실패: {str(e)}")
+        print("백테스트만 실행됩니다.")
+    
     while 1:
         testresult = main(
             start_date=start_date,
@@ -409,6 +675,47 @@ if __name__ == "__main__":
             profit_target=profit_target,
             stop_loss=stop_loss
         )
-        print(f"last_trade_status: {testresult}")
+        
+        # 백테스트 결과 처리
+        if isinstance(testresult, dict):
+            backtest_status = testresult.get('last_trade_status', 'unknown')
+            print(f"\n백테스트 결과 상태: {backtest_status}")
+            
+            # 상태 업데이트 및 실제 거래 실행
+            if saved_state is not None and trader is not None:
+                prev_status = saved_state.get('last_backtest_status', 'none')
+                
+                # 실제 거래 실행
+                trade_executed = execute_real_trade(
+                    trader=trader,
+                    ticker=ticker,
+                    backtest_status=backtest_status,
+                    prev_status=prev_status,
+                    state=saved_state,
+                    buy_cash_ratio=buy_cash_ratio
+                )
+                
+                # 상태 업데이트
+                saved_state['last_backtest_status'] = backtest_status
+                saved_state['last_update'] = pd.Timestamp.now()
+                
+                # 실제 잔고 재조회 및 업데이트
+                try:
+                    balance = trader.get_balance(ticker)
+                    saved_state['actual_cash'] = balance['cash']
+                    saved_state['actual_coin_amount'] = balance['coin']
+                except Exception as e:
+                    print(f"경고: 잔고 조회 실패: {str(e)}")
+                
+                TradeStateManager.save_state(saved_state)
+            else:
+                # 상태 저장되지 않았거나 trader가 없는 경우
+                if saved_state is None:
+                    print("\n경고: 거래 상태가 저장되지 않았습니다. 실제 거래를 실행하지 않습니다.")
+                if trader is None:
+                    print("\n경고: 실제 거래 기능이 사용 불가능합니다. 백테스트만 실행됩니다.")
+        else:
+            print(f"last_trade_status: {testresult}")
+        
         wait_start("3m")
 

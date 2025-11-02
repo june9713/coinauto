@@ -44,7 +44,7 @@ class Visualizer:
                 print(f"경고: 폰트 파일을 찾을 수 없습니다: {self.font_path}")
                 plt.rcParams['font.family'] = 'DejaVu Sans'
             # 유니코드 마이너스 기호 대신 ASCII 마이너스(-) 사용하여 경고 방지
-            plt.rcParams['axes.unicode_minus'] = True
+            plt.rcParams['axes.unicode_minus'] = False
         except Exception as e:
             err = traceback.format_exc()
             print("err", err)
@@ -164,29 +164,70 @@ class Visualizer:
         try:
             ax.plot(dates, close_prices, label='BTC 종가', color='black', linewidth=1.5)
             
-            # 매수/매도 신호 표시
+            # 매수/매도 신호 표시 (매도 유형별 구분)
             buy_dates = []
             buy_prices = []
-            sell_dates = []
-            sell_prices = []
+            sell_profit_dates = []  # 이익실현
+            sell_profit_prices = []
+            sell_loss_dates = []  # 손절
+            sell_loss_prices = []
+            sell_expiry_dates = []  # 기간 만료
+            sell_expiry_prices = []
+            
+            # trades 데이터 확인
+            if len(trades) == 0:
+                print(f"  경고: 거래 데이터가 없습니다 (trades 개수: {len(trades)})")
+            else:
+                print(f"  거래 데이터 확인: {len(trades)}개 거래")
+                print(f"  그래프 데이터 범위: {dates[0]} ~ {dates[-1]}")
             
             for trade in trades:
                 trade_date = trade['date']
                 trade_price = trade['price']
+                action = trade.get('action', '')
                 
-                if trade['action'].startswith('BUY'):
+                # 날짜 형식 확인 및 변환
+                if not isinstance(trade_date, pd.Timestamp):
+                    trade_date = pd.to_datetime(trade_date)
+                
+                # 그래프 범위 내에 있는지 확인
+                if trade_date < dates[0] or trade_date > dates[-1]:
+                    # 범위 밖 거래는 건너뛰기 (디버깅용으로만 로그 출력)
+                    continue
+                
+                if action.startswith('BUY'):
                     buy_dates.append(trade_date)
                     buy_prices.append(trade_price)
-                elif trade['action'].startswith('SELL'):
-                    sell_dates.append(trade_date)
-                    sell_prices.append(trade_price)
+                elif action.startswith('SELL'):
+                    if '이익실현' in action:
+                        sell_profit_dates.append(trade_date)
+                        sell_profit_prices.append(trade_price)
+                    elif '손절' in action:
+                        sell_loss_dates.append(trade_date)
+                        sell_loss_prices.append(trade_price)
+                    elif '기간 만료' in action:
+                        sell_expiry_dates.append(trade_date)
+                        sell_expiry_prices.append(trade_price)
+                    else:
+                        # 일반 매도 (유형 불명)
+                        sell_expiry_dates.append(trade_date)
+                        sell_expiry_prices.append(trade_price)
+            
+            # 결과 확인 로그
+            print(f"  매수: {len(buy_dates)}개, 이익실현: {len(sell_profit_dates)}개, 손절: {len(sell_loss_dates)}개, 기간 만료: {len(sell_expiry_dates)}개")
             
             if buy_dates:
                 ax.scatter(buy_dates, buy_prices, color='red', marker='^', s=100, 
                           label='매수', zorder=5)
-            if sell_dates:
-                ax.scatter(sell_dates, sell_prices, color='blue', marker='v', s=100, 
-                          label='매도', zorder=5)
+            if sell_profit_dates:
+                ax.scatter(sell_profit_dates, sell_profit_prices, color='blue', marker='v', s=100, 
+                          label='매도 (이익실현)', zorder=5)
+            if sell_loss_dates:
+                ax.scatter(sell_loss_dates, sell_loss_prices, color='orange', marker='v', s=100, 
+                          label='매도 (손절)', zorder=5)
+            if sell_expiry_dates:
+                ax.scatter(sell_expiry_dates, sell_expiry_prices, color='purple', marker='v', s=100, 
+                          label='매도 (기간 만료)', zorder=5)
             
             ax.set_ylabel('가격 (원)', fontsize=10)
             ax.set_title('BTC 가격 및 매매 신호', fontsize=12, fontweight='bold')
@@ -254,29 +295,70 @@ class Visualizer:
             ax.plot(dates, ma_values, label=f'이동평균 ({ma_window}개)', 
                    color='green', linewidth=2, linestyle='--', alpha=0.8)
             
-            # 매수/매도 신호 표시
+            # 매수/매도 신호 표시 (매도 유형별 구분)
             buy_dates = []
             buy_prices = []
-            sell_dates = []
-            sell_prices = []
+            sell_profit_dates = []  # 이익실현
+            sell_profit_prices = []
+            sell_loss_dates = []  # 손절
+            sell_loss_prices = []
+            sell_expiry_dates = []  # 기간 만료
+            sell_expiry_prices = []
+            
+            # trades 데이터 확인
+            if len(trades) == 0:
+                print(f"  경고: 거래 데이터가 없습니다 (trades 개수: {len(trades)})")
+            else:
+                print(f"  거래 데이터 확인: {len(trades)}개 거래")
+                print(f"  그래프 데이터 범위: {dates[0]} ~ {dates[-1]}")
             
             for trade in trades:
                 trade_date = trade['date']
                 trade_price = trade['price']
+                action = trade.get('action', '')
                 
-                if trade['action'].startswith('BUY'):
+                # 날짜 형식 확인 및 변환
+                if not isinstance(trade_date, pd.Timestamp):
+                    trade_date = pd.to_datetime(trade_date)
+                
+                # 그래프 범위 내에 있는지 확인
+                if trade_date < dates[0] or trade_date > dates[-1]:
+                    # 범위 밖 거래는 건너뛰기 (디버깅용으로만 로그 출력)
+                    continue
+                
+                if action.startswith('BUY'):
                     buy_dates.append(trade_date)
                     buy_prices.append(trade_price)
-                elif trade['action'].startswith('SELL'):
-                    sell_dates.append(trade_date)
-                    sell_prices.append(trade_price)
+                elif action.startswith('SELL'):
+                    if '이익실현' in action:
+                        sell_profit_dates.append(trade_date)
+                        sell_profit_prices.append(trade_price)
+                    elif '손절' in action:
+                        sell_loss_dates.append(trade_date)
+                        sell_loss_prices.append(trade_price)
+                    elif '기간 만료' in action:
+                        sell_expiry_dates.append(trade_date)
+                        sell_expiry_prices.append(trade_price)
+                    else:
+                        # 일반 매도 (유형 불명)
+                        sell_expiry_dates.append(trade_date)
+                        sell_expiry_prices.append(trade_price)
+            
+            # 결과 확인 로그
+            print(f"  매수: {len(buy_dates)}개, 이익실현: {len(sell_profit_dates)}개, 손절: {len(sell_loss_dates)}개, 기간 만료: {len(sell_expiry_dates)}개")
             
             if buy_dates:
                 ax.scatter(buy_dates, buy_prices, color='red', marker='^', s=100, 
                           label='매수', zorder=5)
-            if sell_dates:
-                ax.scatter(sell_dates, sell_prices, color='blue', marker='v', s=100, 
-                          label='매도', zorder=5)
+            if sell_profit_dates:
+                ax.scatter(sell_profit_dates, sell_profit_prices, color='blue', marker='v', s=100, 
+                          label='매도 (이익실현)', zorder=5)
+            if sell_loss_dates:
+                ax.scatter(sell_loss_dates, sell_loss_prices, color='orange', marker='v', s=100, 
+                          label='매도 (손절)', zorder=5)
+            if sell_expiry_dates:
+                ax.scatter(sell_expiry_dates, sell_expiry_prices, color='purple', marker='v', s=100, 
+                          label='매도 (기간 만료)', zorder=5)
             
             ax.set_ylabel('가격 (원)', fontsize=10)
             ax.set_title('BTC 가격 (종가, 이동평균, 음봉/양봉)', fontsize=12, fontweight='bold')

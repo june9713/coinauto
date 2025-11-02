@@ -12,7 +12,7 @@ class ConditionManager:
     """백테스트 조건 관리 클래스"""
     
     # 순환 참조 방지를 위해 DATA_DIR을 직접 정의 (Config와 동일한 값 사용)
-    DATA_DIR = './datas'
+    DATA_DIR = './'
     CONDITION_FILE = os.path.join(DATA_DIR, 'backtest_conditions.json')
     
     @staticmethod
@@ -98,8 +98,9 @@ class ConditionManager:
         - condition_dict (dict): 조건 딕셔너리
         
         Returns:
-        - str: 조건 문자열 (예: "buy3.0_sell-4.0_sl-3.0_min20000_slip1000_w13_ar3_cap1_24h")
-                또는 QQC 전략: "qqc_vw55_mw9_vm1.4_bcr0.9_hp15_pt17.6_sl-28.6_slip1000_cap1000000_btc_3m")
+        - str: 조건 문자열 (예: "buy3.0_sell-4.0_sl-3.0_min20000_slip1000_w13_ar3_24h")
+                또는 QQC 전략: "qqc_vw55_mw9_vm1.4_bcr0.9_hp15_pt17.6_sl-28.6_slip1000_btc_3m")
+                (참고: initial_capital은 파일명에 포함되지 않음)
         """
         try:
             parts = []
@@ -137,8 +138,9 @@ class ConditionManager:
                 parts.append(f"w{condition_dict['window']}")
             if condition_dict.get('aspect_ratio') is not None:
                 parts.append(f"ar{condition_dict['aspect_ratio']:.1f}")
-            if condition_dict.get('initial_capital') is not None:
-                parts.append(f"cap{condition_dict['initial_capital']:.0f}")
+            # initial_capital은 파일명에 포함하지 않음 (잔고 정보와 관련 없도록)
+            # if condition_dict.get('initial_capital') is not None:
+            #     parts.append(f"cap{condition_dict['initial_capital']:.0f}")
             
             ticker = condition_dict.get('ticker', 'BTC')
             interval = condition_dict.get('interval', '24h')

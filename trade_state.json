@@ -1,0 +1,10 @@
+{
+  "initialized": true,
+  "initial_capital": 27133.336193,
+  "actual_cash": 27133.336193,
+  "actual_coin_amount": 1e-07,
+  "ticker": "BTC",
+  "last_backtest_status": "none",
+  "last_update": "2025-11-02T16:15:52.029520",
+  "sync_needed": false
+}
