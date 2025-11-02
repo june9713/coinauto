@@ -189,16 +189,61 @@ class DataManager:
             print("err", err)
             raise
     
-    def save_history_to_file(self, df, is_realtime_update=False):
+    def save_history_to_file(self, df, is_realtime_update=False, interval=None):
         """
         데이터프레임을 파일에 저장합니다.
         
         Parameters:
         - df (pd.DataFrame): 저장할 OHLCV 데이터프레임
         - is_realtime_update (bool): 실시간 업데이트 여부. True면 날짜별 폴더에 시간별 파일로 저장
+        - interval (str, optional): 캔들스틱 간격. None이면 condition_dict에서 가져오거나 기본값 사용
         """
         try:
             self.ensure_data_directory()
+            
+            # 현재 시간 기준으로 미래 캔들 필터링 (완료된 캔들만 저장)
+            now = pd.Timestamp.now()
+            original_count = len(df)
+            
+            # interval을 고려하여 현재 시간에서 interval만큼 빼서 비교
+            # 예: 현재 시간이 23:03이고 interval이 3m이면, 23:03 캔들은 미래 캔들로 간주
+            #     따라서 23:00 이하의 캔들만 저장
+            # interval 파라미터가 없으면 condition_dict에서 가져오기
+            if interval is None:
+                if self.condition_dict and 'interval' in self.condition_dict:
+                    interval = self.condition_dict['interval']
+                else:
+                    # condition_dict에도 없으면 기본값 사용 (하지만 이 경우는 드뭄)
+                    interval = '24h'
+            
+            interval_timedelta = self._get_interval_timedelta(interval)
+            cutoff_time = now - interval_timedelta
+            
+            # cutoff_time보다 이전의 캔들만 저장 (현재 시간과 같은 시간의 캔들 제외)
+            future_candles_df = df[df.index >= cutoff_time]
+            df = df[df.index < cutoff_time]
+            filtered_count = len(df)
+            
+            if original_count > filtered_count:
+                print(f"미래 캔들 필터링: {original_count}개 → {filtered_count}개 (제외: {original_count - filtered_count}개)")
+                print(f"  현재 시간: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"  cutoff 시간 (현재 - {interval}): {cutoff_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                # 버려진 미래 캔들의 시간 출력
+                if len(future_candles_df) > 0:
+                    print(f"  [버려진 미래 캔들 시간]")
+                    for idx, candle_time in enumerate(future_candles_df.index):
+                        print(f"    - {candle_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                        if idx >= 9:  # 최대 10개만 출력 (너무 많으면 생략)
+                            remaining = len(future_candles_df) - 10
+                            if remaining > 0:
+                                print(f"    ... 외 {remaining}개 더 있음")
+                            break
+                
+                # 현재 캔들(완료된 캔들 중 가장 최신)의 시간 출력
+                if len(df) > 0:
+                    current_candle_time = df.index[-1]
+                    print(f"  [현재 캔들 시간] {current_candle_time.strftime('%Y-%m-%d %H:%M:%S')}")
             
             # 중복 제거 및 정렬
             df = df[~df.index.duplicated(keep='first')]
@@ -206,7 +251,6 @@ class DataManager:
             
             if is_realtime_update and len(df) > 0:
                 # 실시간 업데이트: 날짜별 폴더에 시간별 파일로 저장
-                now = pd.Timestamp.now()
                 date_folder = now.strftime('%Y-%m-%d')
                 date_dir = os.path.join(self.data_dir, date_folder)
                 
@@ -525,7 +569,7 @@ class DataManager:
                             
                             # 재다운로드한 데이터를 파일에 저장 (날짜별/시간별로 나눠서 저장)
                             print(f"\n재다운로드한 데이터 파일 저장 중...")
-                            self.save_history_to_file(recent_df, is_realtime_update=False)
+                            self.save_history_to_file(recent_df, is_realtime_update=False, interval=interval)
                             
                             # 기존 데이터를 업데이트된 것으로 교체
                             existing_df = combined_df
@@ -563,13 +607,56 @@ class DataManager:
                 print(f"새로운 데이터 {len(new_df)}개 추가됨")
                 print(f"  기간: {new_df.index[0]} ~ {new_df.index[-1]}")
                 
-                # 기존 데이터와 병합
-                combined_df = pd.concat([existing_df, new_df])
-                combined_df = combined_df[~combined_df.index.duplicated(keep='last')]  # 중복 시 새로운 데이터 우선
+                # 기존 데이터와 새로운 데이터 비교하여 값이 다른 경우에만 교체
+                common_indices = existing_df.index.intersection(new_df.index)
+                replaced_count = 0
+                unchanged_count = 0
+                updated_indices = []
+                
+                if len(common_indices) > 0:
+                    print(f"  기존 데이터와 겹치는 캔들: {len(common_indices)}개 발견")
+                    # 값이 같은 캔들은 새로운 데이터에서 제외 (기존 데이터 유지)
+                    new_df_to_use = new_df.copy()
+                    
+                    for idx in common_indices:
+                        existing_row = existing_df.loc[idx]
+                        new_row = new_df.loc[idx]
+                        
+                        # 값 비교 (open, high, low, close, volume)
+                        values_different = False
+                        different_fields = []
+                        
+                        for col in ['open', 'high', 'low', 'close', 'volume']:
+                            if col in existing_row and col in new_row:
+                                # 부동소수점 비교를 위해 작은 차이는 무시
+                                if abs(float(existing_row[col]) - float(new_row[col])) > 0.01:
+                                    values_different = True
+                                    different_fields.append(f"{col}: {existing_row[col]:.2f} → {new_row[col]:.2f}")
+                        
+                        if values_different:
+                            replaced_count += 1
+                            updated_indices.append(idx)
+                            print(f"    [값 변경] {idx.strftime('%Y-%m-%d %H:%M:%S')}: {', '.join(different_fields)}")
+                        else:
+                            unchanged_count += 1
+                            # 값이 같은 경우 새로운 데이터에서 제외 (기존 데이터 유지)
+                            new_df_to_use = new_df_to_use.drop(idx)
+                else:
+                    # 겹치는 캔들이 없으면 모든 새로운 데이터 사용
+                    new_df_to_use = new_df.copy()
+                
+                if replaced_count > 0:
+                    print(f"  총 {replaced_count}개 캔들의 값이 업데이트되었습니다.")
+                if unchanged_count > 0:
+                    print(f"  {unchanged_count}개 캔들의 값은 동일하여 기존 데이터를 유지합니다.")
+                
+                # 기존 데이터와 병합 (값이 다른 경우만 새로운 데이터로 교체, 값이 같으면 기존 데이터 유지)
+                combined_df = pd.concat([existing_df, new_df_to_use])
+                combined_df = combined_df[~combined_df.index.duplicated(keep='last')]  # 중복 시 마지막 데이터 우선
                 combined_df = combined_df.sort_index()
                 
                 # 실시간 업데이트: 새로운 데이터만 별도 파일로 저장
-                self.save_history_to_file(new_df, is_realtime_update=True)
+                self.save_history_to_file(new_df, is_realtime_update=True, interval=interval)
                 
                 return combined_df
                 
@@ -597,7 +684,7 @@ class DataManager:
                 print(f"  기간: {df.index[0]} ~ {df.index[-1]}")
                 
                 # 파일에 저장
-                self.save_history_to_file(df)
+                self.save_history_to_file(df, is_realtime_update=False, interval=interval)
                 
                 return df
                 

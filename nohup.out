@@ -29636,3 +29636,71 @@ INFO:     127.0.0.1:46834 - "GET /api/trades HTTP/1.1" 200 OK
 INFO:     127.0.0.1:59236 - "GET /api/images/today?t=1762090644706 HTTP/1.1" 200 OK
 INFO:     127.0.0.1:59250 - "GET /api/images/3days?t=1762090644706 HTTP/1.1" 200 OK
 INFO:     127.0.0.1:59248 - "GET /api/images/5days?t=1762090644706 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 44초 남음대기 시간: 0시간 1분 43초 남음대기 시간: 0시간 1분 42초 남음대기 시간: 0시간 1분 41초 남음대기 시간: 0시간 1분 40초 남음INFO:     127.0.0.1:46850 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45710 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46834 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59236 - "GET /api/images/today?t=1762090649705 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59250 - "GET /api/images/3days?t=1762090649705 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59248 - "GET /api/images/5days?t=1762090649705 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 39초 남음대기 시간: 0시간 1분 38초 남음대기 시간: 0시간 1분 37초 남음대기 시간: 0시간 1분 36초 남음대기 시간: 0시간 1분 35초 남음INFO:     127.0.0.1:46850 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45710 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46834 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59236 - "GET /api/images/3days?t=1762090654706 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59248 - "GET /api/images/5days?t=1762090654706 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59250 - "GET /api/images/today?t=1762090654706 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 34초 남음대기 시간: 0시간 1분 33초 남음대기 시간: 0시간 1분 32초 남음대기 시간: 0시간 1분 31초 남음대기 시간: 0시간 1분 30초 남음INFO:     127.0.0.1:45710 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46834 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59236 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59250 - "GET /api/images/today?t=1762090659705 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59248 - "GET /api/images/3days?t=1762090659705 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51048 - "GET /api/images/5days?t=1762090659705 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 29초 남음대기 시간: 0시간 1분 28초 남음대기 시간: 0시간 1분 27초 남음INFO:     116.37.80.183:1334 - "GET /api/balance HTTP/1.1" 200 OK
+INFO:     116.37.80.183:8655 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     116.37.80.183:10996 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     116.37.80.183:10233 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     116.37.80.183:14249 - "GET /api/assets_history HTTP/1.1" 200 OK
+INFO:     116.37.80.183:1111 - "GET /api/images/today?t=1762090662202 HTTP/1.1" 200 OK
+INFO:     116.37.80.183:1334 - "GET /api/images/3days?t=1762090662202 HTTP/1.1" 200 OK
+INFO:     116.37.80.183:8655 - "GET /api/images/5days?t=1762090662202 HTTP/1.1" 200 OK
+조건 로드 완료: ./backtest_conditions.json
+한글 폰트 설정 완료: Malgun Gothic
+백테스트 결과 파일이 없습니다: ./datas/backtest_results_vw55_mw9_vm1.4_bcr0.9_hp15_pt17.6_sl-28.6_slip1000_btc_3m.csv
+잔고 이력 데이터가 없어 그래프를 생성할 수 없습니다.
+INFO:     116.37.80.183:1111 - "GET /api/images/balance_history?t=1762090662202 HTTP/1.1" 404 Not Found
+대기 시간: 0시간 1분 26초 남음대기 시간: 0시간 1분 25초 남음INFO:     127.0.0.1:45710 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46834 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59236 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59250 - "GET /api/images/today?t=1762090664706 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59248 - "GET /api/images/3days?t=1762090664706 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51048 - "GET /api/images/5days?t=1762090664706 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 24초 남음대기 시간: 0시간 1분 23초 남음대기 시간: 0시간 1분 22초 남음대기 시간: 0시간 1분 21초 남음대기 시간: 0시간 1분 20초 남음INFO:     127.0.0.1:45710 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46834 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59236 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59250 - "GET /api/images/today?t=1762090669707 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59248 - "GET /api/images/3days?t=1762090669707 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51048 - "GET /api/images/5days?t=1762090669707 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 19초 남음대기 시간: 0시간 1분 18초 남음대기 시간: 0시간 1분 17초 남음대기 시간: 0시간 1분 16초 남음대기 시간: 0시간 1분 15초 남음INFO:     127.0.0.1:45710 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46834 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59236 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59250 - "GET /api/images/today?t=1762090674706 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59248 - "GET /api/images/3days?t=1762090674706 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51048 - "GET /api/images/5days?t=1762090674706 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 14초 남음대기 시간: 0시간 1분 13초 남음대기 시간: 0시간 1분 12초 남음대기 시간: 0시간 1분 11초 남음대기 시간: 0시간 1분 10초 남음INFO:     127.0.0.1:45710 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46834 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59236 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59250 - "GET /api/images/today?t=1762090679707 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59248 - "GET /api/images/3days?t=1762090679707 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51048 - "GET /api/images/5days?t=1762090679707 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 9초 남음대기 시간: 0시간 1분 8초 남음대기 시간: 0시간 1분 7초 남음대기 시간: 0시간 1분 6초 남음대기 시간: 0시간 1분 5초 남음INFO:     127.0.0.1:45710 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:46834 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59236 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59250 - "GET /api/images/today?t=1762090684707 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59248 - "GET /api/images/3days?t=1762090684707 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51048 - "GET /api/images/5days?t=1762090684707 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 4초 남음대기 시간: 0시간 1분 3초 남음대기 시간: 0시간 1분 2초 남음대기 시간: 0시간 1분 1초 남음대기 시간: 0시간 1분 0초 남음INFO:     127.0.0.1:45710 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59236 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59250 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59248 - "GET /api/images/today?t=1762090689708 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51048 - "GET /api/images/3days?t=1762090689708 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45710 - "GET /api/images/5days?t=1762090689708 HTTP/1.1" 200 OK
+Killed

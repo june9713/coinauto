@@ -7,6 +7,7 @@ import threading
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 import pandas as pd
+import numpy as np
 
 
 class SharedState:
@@ -326,8 +327,30 @@ class SharedState:
         # Timestamp와 datetime을 문자열로 변환
         elif isinstance(value, (pd.Timestamp, datetime)):
             return value.isoformat()
-        # numpy array와 pandas Series를 리스트로 변환
-        elif hasattr(value, '__array__') or isinstance(value, (pd.Series, pd.Index)):
+        # numpy 스칼라 타입을 파이썬 기본 타입으로 변환 (배열 체크보다 먼저 처리)
+        elif isinstance(value, (np.generic, np.number)):
+            try:
+                if pd.isna(value):
+                    return None
+                # numpy 스칼라를 파이썬 기본 타입으로 변환
+                return value.item() if hasattr(value, 'item') else float(value)
+            except (ValueError, TypeError):
+                return None
+        # numpy array와 pandas Series를 리스트로 변환 (스칼라가 아닌 배열만)
+        elif hasattr(value, '__array__') and not isinstance(value, (np.generic, np.number)):
+            try:
+                # iterable인지 확인 (배열인 경우)
+                iter(value)
+                return [self._serialize_value(item) for item in value]
+            except TypeError:
+                # iterable이 아닌 경우 스칼라로 처리
+                try:
+                    if pd.isna(value):
+                        return None
+                    return value.item() if hasattr(value, 'item') else float(value)
+                except (ValueError, TypeError):
+                    return None
+        elif isinstance(value, (pd.Series, pd.Index)):
             return [self._serialize_value(item) for item in value]
         # 딕셔너리 재귀 처리
         elif isinstance(value, dict):

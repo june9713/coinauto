@@ -1116,7 +1116,8 @@ class Visualizer:
     
     def plot_backtest_results_by_periods(self, df, result, base_dir='./images',
                                          buy_threshold=None, sell_threshold=None,
-                                         volume_window=None, ma_window=None, volume_multiplier=None):
+                                         volume_window=None, ma_window=None, volume_multiplier=None,
+                                         interval=None):
         """
         여러 기간별 백테스트 결과 그래프 생성 (순차 처리)
 
@@ -1144,8 +1145,40 @@ class Visualizer:
             if sell_threshold is None:
                 sell_threshold = Config.DEFAULT_SELL_ANGLE_THRESHOLD
             
-            # 마지막 날짜 기준
-            last_date = df.index[-1]
+            # 현재 시간에서 interval만큼 뺀 시간까지 그래프에 표시
+            now = pd.Timestamp.now()
+            if interval is not None:
+                # interval을 timedelta로 변환
+                from datetime import timedelta
+                if interval.endswith('m'):
+                    minutes = int(interval[:-1])
+                    interval_timedelta = timedelta(minutes=minutes)
+                elif interval.endswith('h'):
+                    hours = int(interval[:-1])
+                    if hours == 24:
+                        interval_timedelta = timedelta(days=1)
+                    else:
+                        interval_timedelta = timedelta(hours=hours)
+                else:
+                    interval_timedelta = timedelta(days=1)  # 기본값
+                
+                # 그래프에 표시할 마지막 시간 = 현재 시간 - interval
+                graph_end_time = now - interval_timedelta
+                
+                # 데이터프레임에서 graph_end_time 이전의 데이터만 사용
+                df = df[df.index < graph_end_time]
+                
+                if len(df) == 0:
+                    print("  경고: 그래프에 표시할 데이터가 없습니다 (현재 시간 기준 필터링 후).")
+                    return
+                
+                last_date = df.index[-1]
+                print(f"  현재 시간: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"  그래프 마지막 시간 (현재 - {interval}): {graph_end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"  그래프에 표시될 마지막 캔들: {last_date.strftime('%Y-%m-%d %H:%M:%S')}")
+            else:
+                # interval 정보가 없으면 데이터의 마지막 날짜 사용
+                last_date = df.index[-1]
             
             # 작업 리스트 생성
             tasks = []

@@ -219,10 +219,35 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
             # 증분 업데이트: 현재 시간을 기준으로 완료된 캔들만 선택
             now = pd.Timestamp.now()
             
-            # 현재 시간보다 미래의 캔들 데이터 제외
-            completed_candles_df = df[df.index <= now]
+            # interval을 고려하여 현재 시간에서 interval만큼 빼서 비교
+            # 예: 현재 시간이 23:03이고 interval이 3m이면, 23:03 캔들은 미래 캔들로 간주
+            #     따라서 23:00 이하의 캔들만 사용
+            interval_timedelta = data_manager._get_interval_timedelta(interval)
+            cutoff_time = now - interval_timedelta
             
-            print(f"  현재 시간 ({now.strftime('%Y-%m-%d %H:%M:%S')}) 기준으로 미래 캔들 제외: {len(df) - len(completed_candles_df)}개 제외됨")
+            # cutoff_time보다 이전의 캔들만 사용 (현재 시간과 같은 시간의 캔들 제외)
+            completed_candles_df = df[df.index < cutoff_time]
+            future_candles_df = df[df.index >= cutoff_time]
+            
+            print(f"  현재 시간: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"  cutoff 시간 (현재 - {interval}): {cutoff_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"  미래 캔들 제외: {len(df) - len(completed_candles_df)}개 제외됨")
+            
+            # 버려진 미래 캔들의 시간 출력
+            if len(future_candles_df) > 0:
+                print(f"  [버려진 미래 캔들 시간]")
+                for idx, candle_time in enumerate(future_candles_df.index):
+                    print(f"    - {candle_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                    if idx >= 9:  # 최대 10개만 출력 (너무 많으면 생략)
+                        remaining = len(future_candles_df) - 10
+                        if remaining > 0:
+                            print(f"    ... 외 {remaining}개 더 있음")
+                        break
+            
+            # 현재 캔들(완료된 캔들 중 가장 최신)의 시간 출력
+            if len(completed_candles_df) > 0:
+                current_candle_time = completed_candles_df.index[-1]
+                print(f"  [현재 캔들 시간] {current_candle_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
             # 마지막 56개만 사용 (과거 55개 + 현재 1개)
             required_count = volume_window_val + 1  # 56개 필요
@@ -304,20 +329,96 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         print("\n[단계 4-1] 기존 백테스트 결과 로드 중...")
         historical_results_df = data_manager.load_backtest_results(ticker=ticker, condition_dict=current_condition)
 
-        # 거래 내역 중복 제거 (현재 백테스트 결과만 사용)
-        # 주의: 과거 CSV와 병합하지 않고, 현재 백테스트 결과만 저장하여 중복 방지
+        # 현재 백테스트 결과의 거래 기록
         current_trades = result.get('trades', [])
+        
+        # 그래프에 표시할 기간 범위 (백테스트에 사용된 데이터 범위)
+        graph_start_date = original_df_for_backtest.index[0] if len(original_df_for_backtest) > 0 else None
+        graph_end_date = original_df_for_backtest.index[-1] if len(original_df_for_backtest) > 0 else None
+        
+        # Trade History는 최대 과거 1일까지만 표시
+        now = pd.Timestamp.now()
+        trade_history_limit = now - pd.Timedelta(days=1)
+        
+        # 과거 백테스트 결과에서 그래프 기간 내의 거래 기록 추출 (최대 과거 1일까지만)
+        historical_trades = []
+        if historical_results_df is not None and len(historical_results_df) > 0:
+            # trade_date 컬럼이 있고 값이 있는 행만 필터링
+            if 'trade_date' in historical_results_df.columns:
+                historical_trades_df = historical_results_df[
+                    historical_results_df['trade_date'].notna()
+                ].copy()
+                
+                # trade_date를 datetime으로 변환
+                historical_trades_df['trade_date'] = pd.to_datetime(historical_trades_df['trade_date'])
+                
+                # Trade History 제한: 최대 과거 1일까지만 표시
+                historical_trades_df = historical_trades_df[
+                    historical_trades_df['trade_date'] >= trade_history_limit
+                ]
+                
+                # 그래프 기간 내의 거래만 필터링
+                if graph_start_date is not None:
+                    historical_trades_df = historical_trades_df[
+                        historical_trades_df['trade_date'] >= graph_start_date
+                    ]
+                if graph_end_date is not None:
+                    historical_trades_df = historical_trades_df[
+                        historical_trades_df['trade_date'] <= graph_end_date
+                    ]
+                
+                # DataFrame을 거래 딕셔너리 리스트로 변환
+                for _, row in historical_trades_df.iterrows():
+                    trade = {
+                        'date': row['trade_date'],
+                        'action': row.get('action', ''),
+                        'price': row.get('trade_price', 0),
+                        'amount': row.get('trade_amount', 0),
+                        'total_value': row.get('trade_total_value', 0),
+                        'buy_price': row.get('buy_price', None),
+                        'buy_date': pd.to_datetime(row['buy_date']) if pd.notna(row.get('buy_date')) else None,
+                        'profit': row.get('profit', None),
+                        'profit_percent': row.get('profit_percent', None),
+                        'volume_a': row.get('volume_a', None),
+                        'ma_c': row.get('ma_c', None),
+                        'total_asset': row.get('total_asset_after_trade', None)
+                    }
+                    historical_trades.append(trade)
+                
+                print(f"  과거 백테스트 결과에서 {len(historical_trades)}개 거래 기록 추출 (과거 1일 이내만)")
+                if len(historical_trades) > 0:
+                    print(f"  과거 거래 기간: {min(t['date'] for t in historical_trades)} ~ {max(t['date'] for t in historical_trades)}")
+                    print(f"  Trade History 제한: {trade_history_limit.strftime('%Y-%m-%d %H:%M:%S')} 이후만 표시")
+        else:
+            print(f"  과거 백테스트 결과 없음 또는 비어있음")
 
-        # 중복 제거: (date, action) 조합이 같은 거래는 한 번만 유지
+        # 현재 거래와 과거 거래 병합
+        all_trades = current_trades + historical_trades
+        
+        # 중복 제거: (date, action) 조합이 같은 거래는 한 번만 유지 (현재 거래 우선)
         unique_trades_dict = {}
+        
+        # 먼저 과거 거래 추가 (이전 것)
+        for trade in historical_trades:
+            trade_date = trade['date']
+            if isinstance(trade_date, str):
+                trade_date = pd.to_datetime(trade_date)
+            action = trade.get('action', '')
+            trade_key = (str(trade_date), action)
+            
+            # 아직 없으면 추가
+            if trade_key not in unique_trades_dict:
+                unique_trades_dict[trade_key] = trade
+        
+        # 현재 거래 추가 (최신 것이 우선적으로 덮어씀)
         for trade in current_trades:
             trade_date = trade['date']
             if isinstance(trade_date, str):
                 trade_date = pd.to_datetime(trade_date)
             action = trade.get('action', '')
             trade_key = (str(trade_date), action)
-
-            # 같은 키의 거래가 이미 있으면 최신 정보로 덮어쓰기
+            
+            # 같은 키의 거래가 이미 있으면 최신 정보(현재 거래)로 덮어쓰기
             unique_trades_dict[trade_key] = trade
 
         # 중복 제거된 거래 리스트
@@ -332,7 +433,8 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         result['buy_count'] = len([t for t in unique_trades if t['action'].startswith('BUY')])
         result['sell_count'] = len([t for t in unique_trades if t['action'].startswith('SELL')])
 
-        print(f"  중복 제거 완료: 총 {len(unique_trades)}개 거래 (매수 {result['buy_count']}개, 매도 {result['sell_count']}개)")
+        print(f"  병합 완료: 총 {len(unique_trades)}개 거래 (현재: {len(current_trades)}개, 과거: {len(historical_trades)}개)")
+        print(f"  매수 {result['buy_count']}개, 매도 {result['sell_count']}개")
 
         # 기간별 그래프 생성
         print("\n[단계 4-2] 기간별 백테스트 결과 그래프 생성 중...")
@@ -344,7 +446,8 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
             sell_threshold=0,
             volume_window=volume_window_val,
             ma_window=ma_window_val,
-            volume_multiplier=volume_multiplier_val
+            volume_multiplier=volume_multiplier_val,
+            interval=interval
         )
         
         # 서버 모드인 경우 공유 상태 업데이트
