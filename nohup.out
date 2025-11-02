@@ -138,3 +138,580 @@ INFO:     127.0.0.1:42306 - "GET /api/trades HTTP/1.1" 200 OK
 INFO:     127.0.0.1:50492 - "GET /api/images/today?t=1762081112207 HTTP/1.1" 200 OK
 INFO:     127.0.0.1:42294 - "GET /api/images/3days?t=1762081112207 HTTP/1.1" 200 OK
 INFO:     127.0.0.1:42284 - "GET /api/images/5days?t=1762081112207 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 37초 남음대기 시간: 0시간 1분 36초 남음대기 시간: 0시간 1분 35초 남음대기 시간: 0시간 1분 34초 남음대기 시간: 0시간 1분 33초 남음INFO:     127.0.0.1:42306 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50492 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42294 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42306 - "GET /api/images/3days?t=1762081117210 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50492 - "GET /api/images/5days?t=1762081117210 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:42284 - "GET /api/images/today?t=1762081117210 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 32초 남음대기 시간: 0시간 1분 31초 남음대기 시간: 0시간 1분 30초 남음대기 시간: 0시간 1분 29초 남음대기 시간: 0시간 1분 28초 남음INFO:     127.0.0.1:43884 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/images/today?t=1762081122226 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/5days?t=1762081122226 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/images/3days?t=1762081122226 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 27초 남음대기 시간: 0시간 1분 26초 남음대기 시간: 0시간 1분 25초 남음대기 시간: 0시간 1분 24초 남음대기 시간: 0시간 1분 23초 남음INFO:     127.0.0.1:43884 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/images/today?t=1762081127226 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/3days?t=1762081127226 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/images/5days?t=1762081127226 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 22초 남음대기 시간: 0시간 1분 21초 남음대기 시간: 0시간 1분 20초 남음대기 시간: 0시간 1분 19초 남음대기 시간: 0시간 1분 18초 남음INFO:     127.0.0.1:43884 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/images/today?t=1762081132226 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/3days?t=1762081132226 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/images/5days?t=1762081132226 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 17초 남음대기 시간: 0시간 1분 16초 남음대기 시간: 0시간 1분 15초 남음대기 시간: 0시간 1분 14초 남음대기 시간: 0시간 1분 13초 남음INFO:     127.0.0.1:43898 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/images/today?t=1762081137226 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/images/3days?t=1762081137226 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/images/5days?t=1762081137226 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 12초 남음대기 시간: 0시간 1분 11초 남음대기 시간: 0시간 1분 10초 남음대기 시간: 0시간 1분 9초 남음대기 시간: 0시간 1분 8초 남음INFO:     127.0.0.1:43914 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/images/today?t=1762081142227 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/3days?t=1762081142227 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/images/5days?t=1762081142227 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 7초 남음대기 시간: 0시간 1분 6초 남음대기 시간: 0시간 1분 5초 남음대기 시간: 0시간 1분 4초 남음대기 시간: 0시간 1분 3초 남음INFO:     127.0.0.1:43898 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/images/today?t=1762081147227 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/images/3days?t=1762081147227 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/images/5days?t=1762081147227 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 2초 남음대기 시간: 0시간 1분 1초 남음대기 시간: 0시간 1분 0초 남음대기 시간: 0시간 0분 59초 남음대기 시간: 0시간 0분 58초 남음INFO:     127.0.0.1:43914 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/images/today?t=1762081152227 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/5days?t=1762081152227 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54960 - "GET /api/images/3days?t=1762081152227 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 57초 남음대기 시간: 0시간 0분 56초 남음대기 시간: 0시간 0분 55초 남음대기 시간: 0시간 0분 54초 남음대기 시간: 0시간 0분 53초 남음INFO:     127.0.0.1:43898 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/today?t=1762081157228 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54960 - "GET /api/images/3days?t=1762081157228 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/images/5days?t=1762081157228 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 52초 남음대기 시간: 0시간 0분 51초 남음대기 시간: 0시간 0분 50초 남음대기 시간: 0시간 0분 49초 남음대기 시간: 0시간 0분 48초 남음INFO:     127.0.0.1:57992 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54960 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/images/today?t=1762081162229 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/3days?t=1762081162229 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/images/5days?t=1762081162229 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 47초 남음대기 시간: 0시간 0분 46초 남음대기 시간: 0시간 0분 45초 남음대기 시간: 0시간 0분 44초 남음대기 시간: 0시간 0분 43초 남음INFO:     127.0.0.1:43884 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54960 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/today?t=1762081167229 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/images/3days?t=1762081167229 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/images/5days?t=1762081167229 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 42초 남음대기 시간: 0시간 0분 41초 남음대기 시간: 0시간 0분 40초 남음대기 시간: 0시간 0분 39초 남음대기 시간: 0시간 0분 38초 남음INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/images/today?t=1762081172229 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/images/3days?t=1762081172229 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54960 - "GET /api/images/5days?t=1762081172229 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 37초 남음대기 시간: 0시간 0분 36초 남음대기 시간: 0시간 0분 35초 남음대기 시간: 0시간 0분 34초 남음대기 시간: 0시간 0분 33초 남음INFO:     127.0.0.1:43898 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54960 - "GET /api/images/today?t=1762081177230 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/images/3days?t=1762081177230 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/images/5days?t=1762081177230 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 32초 남음대기 시간: 0시간 0분 31초 남음대기 시간: 0시간 0분 30초 남음대기 시간: 0시간 0분 29초 남음대기 시간: 0시간 0분 28초 남음INFO:     127.0.0.1:43914 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54960 - "GET /api/images/today?t=1762081182232 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/images/3days?t=1762081182232 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/5days?t=1762081182232 HTTP/1.1" 200 OK
+INFO:     14.53.33.180:5297 - "GET / HTTP/1.1" 200 OK
+INFO:     14.53.33.180:7447 - "GET /api/images/3days HTTP/1.1" 200 OK
+INFO:     14.53.33.180:5297 - "GET /api/images/today HTTP/1.1" 200 OK
+INFO:     14.53.33.180:12865 - "GET /api/images/5days HTTP/1.1" 200 OK
+INFO:     14.53.33.180:4672 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     14.53.33.180:14366 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     14.53.33.180:5769 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     14.53.33.180:4672 - "GET /api/images/5days?t=1762081184931 HTTP/1.1" 200 OK
+INFO:     14.53.33.180:7890 - "GET /api/images/today?t=1762081184931 HTTP/1.1" 200 OK
+INFO:     14.53.33.180:8428 - "GET /api/images/3days?t=1762081184931 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 27초 남음대기 시간: 0시간 0분 26초 남음대기 시간: 0시간 0분 25초 남음대기 시간: 0시간 0분 24초 남음대기 시간: 0시간 0분 23초 남음INFO:     127.0.0.1:43884 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54960 - "GET /api/images/today?t=1762081187233 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/images/3days?t=1762081187233 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/images/5days?t=1762081187233 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 22초 남음대기 시간: 0시간 0분 21초 남음대기 시간: 0시간 0분 20초 남음대기 시간: 0시간 0분 19초 남음대기 시간: 0시간 0분 18초 남음INFO:     127.0.0.1:43898 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54960 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/images/today?t=1762081192233 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/images/3days?t=1762081192233 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/5days?t=1762081192233 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 17초 남음대기 시간: 0시간 0분 16초 남음대기 시간: 0시간 0분 15초 남음대기 시간: 0시간 0분 14초 남음대기 시간: 0시간 0분 13초 남음INFO:     127.0.0.1:43898 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54960 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/images/3days?t=1762081197233 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/today?t=1762081197233 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/images/5days?t=1762081197233 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 12초 남음INFO:     14.53.33.180:9384 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     14.53.33.180:1867 - "GET /api/images/3days?t=1762081200159 HTTP/1.1" 200 OK
+INFO:     14.53.33.180:3813 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     14.53.33.180:5776 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     14.53.33.180:9695 - "GET /api/images/5days?t=1762081200159 HTTP/1.1" 200 OK
+INFO:     14.53.33.180:12638 - "GET /api/images/today?t=1762081200159 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 11초 남음대기 시간: 0시간 0분 10초 남음대기 시간: 0시간 3분 9초 남음대기 시간: 0시간 0분 9초 남음INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/today?t=1762081202233 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/images/3days?t=1762081202233 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/5days?t=1762081202233 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 8초 남음대기 시간: 0시간 0분 7초 남음대기 시간: 0시간 0분 6초 남음대기 시간: 0시간 0분 5초 남음대기 시간: 0시간 0분 4초 남음INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43884 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57992 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/today?t=1762081207233 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/images/3days?t=1762081207233 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/5days?t=1762081207233 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 3초 남음대기 시간: 0시간 0분 2초 남음대기 시간: 0시간 0분 1초 남음대기 시간: 0시간 0분 0초 남음백테스트 시작
+api_key: 8f9bdd3fd1...
+secret_key: MGU1ZTJkNT...
+================================================================================
+QQC 백테스트 시작
+================================================================================
+
+시작 날짜가 지정되지 않음. 데이터에서 첫 번째 날짜를 확인합니다.
+
+[단계 0] 백테스트 조건 확인 중...
+조건 로드 완료: ./backtest_conditions.json
+  조건 변경 없음. 기존 조건 파일 사용
+조건 저장 완료: ./backtest_conditions.json
+
+[단계 1-0] 기존 데이터 존재 여부 확인 중...
+날짜별 폴더에서 시간별 분할 파일을 검색합니다...
+기록 파일 로드 완료 (시간별 분할 파일 병합): 220개 데이터
+  기간: 2025-11-02 08:42:00 ~ 2025-11-02 19:39:00
+  로드된 파일 수: 12개
+
+데이터에서 첫 번째 날짜 확인 중...
+저장된 데이터에서 첫 번째 날짜 확인: 2025-11-02
+백테스트 기간: 2025-11-02 ~ (마지막)
+  ✓ 기존 데이터 발견: 220개 데이터
+  기존 데이터 기간: 2025-11-02 08:42:00 ~ 2025-11-02 19:39:00
+  → 증분 업데이트 후 마지막 56개만 백테스트 실행 예정
+
+[단계 1] 데이터 수집 중...
+
+================================================================================
+기록 데이터 업데이트 검사
+================================================================================
+날짜별 폴더에서 시간별 분할 파일을 검색합니다...
+기록 파일 로드 완료 (시간별 분할 파일 병합): 220개 데이터
+  기간: 2025-11-02 08:42:00 ~ 2025-11-02 19:39:00
+  로드된 파일 수: 12개
+기존 기록 마지막 시간: 2025-11-02 19:39:00
+현재 시간: 2025-11-02 20:00:11
+
+최근 3000개 데이터 누락 확인 중...
+  최근 3000개 데이터에 누락 없음
+
+누락된 시간부터 다운로드: 2025-11-02 19:39:00 ~ 2025-11-02 20:00:11
+
+최신 데이터 다운로드 중... (마지막 기록 이후만 사용)
+[make_history] 효율적 데이터 수집 모드 (requests 직접 호출, from_date 사용)
+  기존 기록 마지막 날짜: 2025-11-02 19:39:00
+  현재 날짜: 2025-11-02 20:00:11
+  필요 캔들 개수: 7개, 조회할 개수: 17개 (필요개수 + 10개)
+  [collect_candles_with_params] API 직접 호출
+    URL: https://api.bithumb.com/v1/candles/minutes/3
+    Parameters: market=KRW-BTC, count=17, to=2025-11-02T20:00:11
+  성공: BTC 3m 데이터 17개 수집 완료
+  기간: 2025-11-02 19:12:00 ~ 2025-11-02 20:00:00
+  조회 완료: 17개 데이터 조회, 필터링 후: 7개 (필요개수: 7개)
+  기간: 2025-11-02 19:42:00 ~ 2025-11-02 20:00:00
+새로운 데이터 7개 추가됨
+  기간: 2025-11-02 19:42:00 ~ 2025-11-02 20:00:00
+기록 파일 저장 완료 (실시간 업데이트, 새 파일 생성): ./datas/2025-11-02/history_vw55_mw9_vm1.4_bcr0.9_hp15_pt17.6_sl-28.6_slip1000_btc_3m_20251102_20.csv
+  총 7개 데이터
+  기간: 2025-11-02 19:42:00 ~ 2025-11-02 20:00:00
+수집 완료: 227개 데이터
+전체 기간: 2025-11-02 08:42:00 ~ 2025-11-02 20:00:00
+백테스트 대상: 227개 데이터 (제외: 0개)
+백테스트 기간: 2025-11-02 08:42:00 ~ 2025-11-02 20:00:00
+
+[백테스트 데이터 선택]
+  is_full_backtest 플래그: False
+  → 부분 백테스트 모드: 기존 데이터가 있어서 마지막 56개만 백테스트 실행
+  백테스트 실행 데이터: 마지막 57개 추출 후 마지막 1개 제외 → 56개 사용
+  백테스트 실행 기간: 2025-11-02 17:12:00 ~ 2025-11-02 19:57:00
+    - 인덱스 0-54: 과거 평균용 (55개)
+    - 인덱스 55: 현재 캔들
+    - 실제 데이터의 마지막 캔들(인덱스 56)은 제외됨
+
+[단계 2] QQC 백테스트 실행 중...
+초기 자본: 27,037원
+거래 가격 슬리퍼지: 1,000원
+매수 조건:
+  - 조건 B: 현재 거래량 >= 거래량 A (55개 평균) * 1.4
+  - 조건 D: 현재 종가 > 이동평균 C (9개 평균)
+  - 조건 E: 양봉 (오픈가 < 종가)
+  - 매수 가격: 다음 오픈가 + 1,000원
+  - 매수 비율: 현금의 90%
+매도 조건:
+  - 수익률 >= 17.6%: 이익실현
+  - 수익률 <= -28.6%: 손절
+  - 매수 후 15 캔들 경과: 무조건 매도 (n+15 캔들의 오픈가)
+
+[백테스트 실행] 실제 사용 데이터: 56개
+  실행 기간: 2025-11-02 17:12:00 ~ 2025-11-02 19:57:00
+
+[디버깅] 매수 조건 확인 통계:
+  총 캔들 수: 56개
+  매수 조건 확인 가능한 캔들: 1개 (최소 56개 필요, 보유하지 않은 경우만)
+  조건 B 만족 (거래량 >= 평균 * 1.4): 1회 (백테스트 조건 확인 가능 범위 내, 보유하지 않은 경우만)
+  조건 D 만족 (종가 > 이동평균): 1회
+  조건 E 만족 (양봉): 0회
+  모든 조건 만족 (B & D & E): 0회
+  조건 B 확인 가능한 캔들 (모든 상태): 55개
+  조건 B 만족 (거래량 >= 평균 * 1.4): 12회 (모든 캔들 기준, 그래프와 동일)
+  조건 D 만족 (종가 > 이동평균): 36회 (모든 캔들 기준, 그래프와 동일)
+  조건 E 만족 (양봉): 20회 (모든 캔들 기준, 그래프와 동일)
+  모든 조건 만족 (B & D & E): 4회 (모든 캔들 기준, 그래프와 동일)
+  실제 매수 발생: 0회
+
+[단계 3] 백테스트 결과 출력 중...
+
+================================================================================
+백테스트 결과
+================================================================================
+초기 자본: 27,037원
+최종 자산: 27,037원 (백테스트 종료 시점의 자산 평가)
+총 수익률: +0.00%
+
+총 거래 횟수: 0회
+매수 횟수: 0회
+매도 횟수: 0회
+
+거래 내역:
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+총 수익: 0원
+수익 거래: 0회
+손실 거래: 0회
+
+거래 간격 분석:
+  거래가 1회 이하여서 간격을 계산할 수 없습니다.
+================================================================================
+
+[단계 4-1] 기존 백테스트 결과 로드 중...
+날짜별 폴더에서 백테스트 결과 시간별 분할 파일을 검색합니다...
+백테스트 결과 로드 완료 (시간별 분할 파일 병합): 65개 기록
+  로드된 파일 수: 9개
+  기존 백테스트 결과: 65개 기록 발견
+  이미지 출력 기간 내 기존 거래: 63개
+  총 거래 병합 완료: 63개 (기존 63개 + 현재 백테스트)
+
+[단계 4-2] 기간별 백테스트 결과 그래프 생성 중...
+  → 3일 그래프 생성 중...
+  거래 데이터 확인: 63개 거래
+  그래프 데이터 범위: 2025-11-02 08:42:00 ~ 2025-11-02 20:00:00
+  매수: 35개, 이익실현: 0개, 손절: 0개, 기간 만료: 28개
+INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54960 - "GET /api/images/3days?t=1762081212234 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/today?t=1762081212234 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/images/5days?t=1762081212234 HTTP/1.1" 200 OK
+  그래프 저장 완료: ./images/backtest_result_3days.jpg (크기: 96,688 bytes)
+  ✓ 3일 그래프 생성 완료: ./images/backtest_result_3days.jpg
+  → 5일 그래프 생성 중...
+  거래 데이터 확인: 63개 거래
+  그래프 데이터 범위: 2025-11-02 08:42:00 ~ 2025-11-02 20:00:00
+  매수: 35개, 이익실현: 0개, 손절: 0개, 기간 만료: 28개
+  그래프 저장 완료: ./images/backtest_result_5days.jpg (크기: 96,688 bytes)
+  ✓ 5일 그래프 생성 완료: ./images/backtest_result_5days.jpg
+  → 오늘 그래프 생성 중...
+  거래 데이터 확인: 63개 거래
+  그래프 데이터 범위: 2025-11-02 08:42:00 ~ 2025-11-02 20:00:00
+  매수: 35개, 이익실현: 0개, 손절: 0개, 기간 만료: 28개
+INFO:     127.0.0.1:43914 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54960 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/images/today?t=1762081217233 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/3days?t=1762081217233 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/5days?t=1762081217233 HTTP/1.1" 200 OK
+  그래프 저장 완료: ./images/backtest_result_today.jpg (크기: 96,688 bytes)
+  ✓ 오늘 그래프 생성 완료: ./images/backtest_result_today.jpg
+
+모든 그래프 생성 완료 (3개)
+
+[단계 5] 백테스트 결과 저장 중...
+  증분 백테스트 결과를 저장합니다.
+  저장 대상 데이터: 백테스트에 사용된 56개 데이터
+
+백테스트 결과 저장 완료 (날짜별/시간별 분할): 7개 파일 생성
+  총 63개 거래 기록
+
+QQC 백테스트 완료!
+
+백테스트 결과 상태: none
+
+[잔고 조회 디버깅] ticker=BTC
+  KRW 전체 잔고: 2,645원
+  KRW 주문 중: 0원
+  KRW 주문 가능: 2,645원
+  BTC 전체 잔고: 0.00014774
+  BTC 주문 중: 0.00000000
+  BTC 주문 가능: 0.00014774
+
+[잔고 조회 디버깅] ticker=BTC
+  KRW 전체 잔고: 2,645원
+  KRW 주문 중: 0원
+  KRW 주문 가능: 2,645원
+  BTC 전체 잔고: 0.00014774
+  BTC 주문 중: 0.00000000
+  BTC 주문 가능: 0.00014774
+대기 시간: 0시간 2분 50초 남음대기 시간: 0시간 2분 49초 남음대기 시간: 0시간 2분 48초 남음INFO:     127.0.0.1:41648 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43898 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/today?t=1762081222235 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54960 - "GET /api/images/3days?t=1762081222235 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/images/5days?t=1762081222235 HTTP/1.1" 200 OK
+대기 시간: 0시간 2분 47초 남음대기 시간: 0시간 2분 46초 남음대기 시간: 0시간 2분 45초 남음대기 시간: 0시간 2분 44초 남음대기 시간: 0시간 2분 43초 남음INFO:     127.0.0.1:43914 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54960 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/images/today?t=1762081227234 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/images/3days?t=1762081227234 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/5days?t=1762081227234 HTTP/1.1" 200 OK
+대기 시간: 0시간 2분 42초 남음대기 시간: 0시간 2분 41초 남음대기 시간: 0시간 2분 40초 남음대기 시간: 0시간 2분 39초 남음대기 시간: 0시간 2분 38초 남음INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/today?t=1762081232236 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/3days?t=1762081232236 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/5days?t=1762081232236 HTTP/1.1" 200 OK
+대기 시간: 0시간 2분 37초 남음대기 시간: 0시간 2분 36초 남음대기 시간: 0시간 2분 35초 남음INFO:     106.101.68.2:59502 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     106.101.68.2:58534 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     106.101.68.2:58512 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     106.101.68.2:58540 - "GET /api/images/today?t=1762081227087 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:10198 - "GET / HTTP/1.1" 200 OK
+INFO:     106.101.68.2:46260 - "GET /api/images/3days?t=1762081227087 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:58534 - "GET /api/images/5days?t=1762081227087 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:46542 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     106.101.68.2:50680 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     106.101.68.2:46536 - "GET /api/images/today HTTP/1.1" 200 OK
+INFO:     106.101.68.2:54826 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     106.101.68.2:1202 - "GET /api/images/today?t=1762081234593 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:46568 - "GET /api/images/3days?t=1762081234593 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:46542 - "GET /api/images/5days?t=1762081234593 HTTP/1.1" 200 OK
+대기 시간: 0시간 2분 34초 남음대기 시간: 0시간 2분 33초 남음INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/3days?t=1762081237235 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/today?t=1762081237235 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/5days?t=1762081237235 HTTP/1.1" 200 OK
+대기 시간: 0시간 2분 32초 남음대기 시간: 0시간 2분 31초 남음대기 시간: 0시간 2분 30초 남음대기 시간: 0시간 2분 29초 남음대기 시간: 0시간 2분 28초 남음INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/today?t=1762081242236 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/3days?t=1762081242236 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/5days?t=1762081242236 HTTP/1.1" 200 OK
+대기 시간: 0시간 2분 27초 남음대기 시간: 0시간 2분 26초 남음대기 시간: 0시간 2분 25초 남음대기 시간: 0시간 2분 24초 남음대기 시간: 0시간 2분 23초 남음INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/today?t=1762081247237 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/3days?t=1762081247237 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/5days?t=1762081247237 HTTP/1.1" 200 OK
+대기 시간: 0시간 2분 22초 남음대기 시간: 0시간 2분 21초 남음대기 시간: 0시간 2분 20초 남음INFO:     106.101.68.2:45324 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     106.101.68.2:45330 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     106.101.68.2:18956 - "GET /api/images/today?t=1762081249597 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:45340 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     106.101.68.2:45354 - "GET /api/images/3days?t=1762081249597 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:45358 - "GET /api/images/5days?t=1762081249597 HTTP/1.1" 200 OK
+대기 시간: 0시간 2분 19초 남음대기 시간: 0시간 2분 18초 남음INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/today?t=1762081252238 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/3days?t=1762081252238 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/5days?t=1762081252238 HTTP/1.1" 200 OK
+대기 시간: 0시간 2분 17초 남음대기 시간: 0시간 2분 16초 남음대기 시간: 0시간 2분 15초 남음대기 시간: 0시간 2분 14초 남음대기 시간: 0시간 2분 13초 남음INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/today?t=1762081257237 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/3days?t=1762081257237 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/5days?t=1762081257237 HTTP/1.1" 200 OK
+대기 시간: 0시간 2분 12초 남음대기 시간: 0시간 2분 11초 남음대기 시간: 0시간 2분 10초 남음대기 시간: 0시간 2분 9초 남음대기 시간: 0시간 2분 8초 남음INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/today?t=1762081262238 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/3days?t=1762081262238 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/5days?t=1762081262238 HTTP/1.1" 200 OK
+대기 시간: 0시간 2분 7초 남음대기 시간: 0시간 2분 6초 남음대기 시간: 0시간 2분 5초 남음INFO:     106.101.68.2:59402 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     106.101.68.2:59502 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     106.101.68.2:36874 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     106.101.68.2:1054 - "GET /api/images/today?t=1762081264595 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:55148 - "GET /api/images/3days?t=1762081264595 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:46360 - "GET /api/images/5days?t=1762081264595 HTTP/1.1" 200 OK
+대기 시간: 0시간 2분 4초 남음대기 시간: 0시간 2분 3초 남음INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/today?t=1762081267238 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/3days?t=1762081267238 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/5days?t=1762081267238 HTTP/1.1" 200 OK
+대기 시간: 0시간 2분 2초 남음대기 시간: 0시간 2분 1초 남음대기 시간: 0시간 2분 0초 남음대기 시간: 0시간 1분 59초 남음대기 시간: 0시간 1분 58초 남음INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/today?t=1762081272239 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/5days?t=1762081272239 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/3days?t=1762081272239 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 57초 남음대기 시간: 0시간 1분 56초 남음대기 시간: 0시간 1분 55초 남음대기 시간: 0시간 1분 54초 남음대기 시간: 0시간 1분 53초 남음INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/today?t=1762081277239 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/3days?t=1762081277239 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/5days?t=1762081277239 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 52초 남음대기 시간: 0시간 1분 51초 남음대기 시간: 0시간 1분 50초 남음INFO:     106.101.68.2:64132 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     106.101.68.2:19140 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     106.101.68.2:60518 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     106.101.68.2:37548 - "GET /api/images/today?t=1762081279597 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:60524 - "GET /api/images/3days?t=1762081279597 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:60530 - "GET /api/images/5days?t=1762081279597 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 49초 남음대기 시간: 0시간 1분 48초 남음INFO:     127.0.0.1:54960 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35060 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/today?t=1762081282240 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/3days?t=1762081282240 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/5days?t=1762081282240 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 47초 남음대기 시간: 0시간 1분 46초 남음대기 시간: 0시간 1분 45초 남음대기 시간: 0시간 1분 44초 남음대기 시간: 0시간 1분 43초 남음INFO:     127.0.0.1:35060 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/today?t=1762081287239 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/3days?t=1762081287239 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/images/5days?t=1762081287239 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 42초 남음대기 시간: 0시간 1분 41초 남음대기 시간: 0시간 1분 40초 남음대기 시간: 0시간 1분 39초 남음대기 시간: 0시간 1분 38초 남음INFO:     127.0.0.1:35060 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/today?t=1762081292240 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/3days?t=1762081292240 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/images/5days?t=1762081292240 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 37초 남음대기 시간: 0시간 1분 36초 남음대기 시간: 0시간 1분 35초 남음INFO:     106.101.68.2:53532 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     106.101.68.2:53540 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     106.101.68.2:53512 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     106.101.68.2:53550 - "GET /api/images/today?t=1762081294595 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:41436 - "GET /api/images/3days?t=1762081294595 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:42046 - "GET /api/images/5days?t=1762081294595 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 34초 남음대기 시간: 0시간 1분 33초 남음INFO:     127.0.0.1:35060 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43914 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/today?t=1762081297240 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/3days?t=1762081297240 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/images/5days?t=1762081297240 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 32초 남음대기 시간: 0시간 1분 31초 남음대기 시간: 0시간 1분 30초 남음대기 시간: 0시간 1분 29초 남음대기 시간: 0시간 1분 28초 남음INFO:     127.0.0.1:43914 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/3days?t=1762081302243 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51440 - "GET /api/images/5days?t=1762081302243 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/images/today?t=1762081302243 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 27초 남음대기 시간: 0시간 1분 26초 남음대기 시간: 0시간 1분 25초 남음대기 시간: 0시간 1분 24초 남음대기 시간: 0시간 1분 23초 남음INFO:     127.0.0.1:43914 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51440 - "GET /api/images/5days?t=1762081307245 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/today?t=1762081307245 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/images/3days?t=1762081307245 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 22초 남음대기 시간: 0시간 1분 21초 남음대기 시간: 0시간 1분 20초 남음INFO:     106.101.68.2:10668 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     106.101.68.2:44248 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     106.101.68.2:44204 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     106.101.68.2:44264 - "GET /api/images/5days?t=1762081309598 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:5806 - "GET /api/images/3days?t=1762081309598 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:55350 - "GET /api/images/today?t=1762081309598 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 19초 남음대기 시간: 0시간 1분 18초 남음INFO:     127.0.0.1:43914 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51440 - "GET /api/images/today?t=1762081312244 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/3days?t=1762081312244 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/images/5days?t=1762081312244 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 17초 남음대기 시간: 0시간 1분 16초 남음대기 시간: 0시간 1분 15초 남음대기 시간: 0시간 1분 14초 남음대기 시간: 0시간 1분 13초 남음INFO:     127.0.0.1:43914 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/images/5days?t=1762081317244 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51440 - "GET /api/images/3days?t=1762081317244 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/today?t=1762081317244 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 12초 남음대기 시간: 0시간 1분 11초 남음대기 시간: 0시간 1분 10초 남음대기 시간: 0시간 1분 9초 남음대기 시간: 0시간 1분 8초 남음INFO:     127.0.0.1:43914 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51440 - "GET /api/images/today?t=1762081322243 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/images/3days?t=1762081322243 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/5days?t=1762081322243 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 7초 남음대기 시간: 0시간 1분 6초 남음대기 시간: 0시간 1분 5초 남음INFO:     106.101.68.2:58322 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     106.101.68.2:58318 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     106.101.68.2:58320 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     106.101.68.2:58328 - "GET /api/images/5days?t=1762081324595 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:58334 - "GET /api/images/3days?t=1762081324595 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:58350 - "GET /api/images/today?t=1762081324595 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 4초 남음대기 시간: 0시간 1분 3초 남음INFO:     127.0.0.1:41648 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51440 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/5days?t=1762081327249 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/3days?t=1762081327249 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/images/today?t=1762081327249 HTTP/1.1" 200 OK
+대기 시간: 0시간 1분 2초 남음대기 시간: 0시간 1분 1초 남음대기 시간: 0시간 1분 0초 남음대기 시간: 0시간 0분 59초 남음대기 시간: 0시간 0분 58초 남음INFO:     127.0.0.1:35886 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51440 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/today?t=1762081332244 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/images/3days?t=1762081332244 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/5days?t=1762081332244 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 57초 남음대기 시간: 0시간 0분 56초 남음대기 시간: 0시간 0분 55초 남음대기 시간: 0시간 0분 54초 남음대기 시간: 0시간 0분 53초 남음INFO:     127.0.0.1:51440 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/today?t=1762081337244 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/3days?t=1762081337244 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51440 - "GET /api/images/5days?t=1762081337244 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 52초 남음대기 시간: 0시간 0분 51초 남음대기 시간: 0시간 0분 50초 남음INFO:     106.101.68.2:49916 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     106.101.68.2:1558 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     106.101.68.2:49934 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     106.101.68.2:49936 - "GET /api/images/today?t=1762081339598 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:49942 - "GET /api/images/3days?t=1762081339598 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:49954 - "GET /api/images/5days?t=1762081339598 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 49초 남음대기 시간: 0시간 0분 48초 남음INFO:     127.0.0.1:41648 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/images/5days?t=1762081342245 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/3days?t=1762081342245 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51440 - "GET /api/images/today?t=1762081342245 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 47초 남음대기 시간: 0시간 0분 46초 남음대기 시간: 0시간 0분 45초 남음대기 시간: 0시간 0분 44초 남음대기 시간: 0시간 0분 43초 남음INFO:     127.0.0.1:53658 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51440 - "GET /api/images/today?t=1762081347246 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/3days?t=1762081347246 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/images/5days?t=1762081347246 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 42초 남음대기 시간: 0시간 0분 41초 남음대기 시간: 0시간 0분 40초 남음대기 시간: 0시간 0분 39초 남음대기 시간: 0시간 0분 38초 남음INFO:     127.0.0.1:35900 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41648 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51440 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/images/today?t=1762081352245 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/3days?t=1762081352245 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/5days?t=1762081352245 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 37초 남음대기 시간: 0시간 0분 36초 남음대기 시간: 0시간 0분 35초 남음INFO:     106.101.68.2:38220 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     106.101.68.2:38208 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     106.101.68.2:38228 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     106.101.68.2:38232 - "GET /api/images/today?t=1762081354597 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:38234 - "GET /api/images/3days?t=1762081354597 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:38242 - "GET /api/images/5days?t=1762081354597 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 34초 남음대기 시간: 0시간 0분 33초 남음INFO:     127.0.0.1:41648 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51440 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/3days?t=1762081357247 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/today?t=1762081357247 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56634 - "GET /api/images/5days?t=1762081357247 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 32초 남음대기 시간: 0시간 0분 31초 남음대기 시간: 0시간 0분 30초 남음대기 시간: 0시간 0분 29초 남음대기 시간: 0시간 0분 28초 남음INFO:     127.0.0.1:41648 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51440 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/images/today?t=1762081362247 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/5days?t=1762081362247 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56634 - "GET /api/images/3days?t=1762081362247 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 27초 남음대기 시간: 0시간 0분 26초 남음대기 시간: 0시간 0분 25초 남음대기 시간: 0시간 0분 24초 남음대기 시간: 0시간 0분 23초 남음INFO:     127.0.0.1:51440 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53658 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35886 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35900 - "GET /api/images/today?t=1762081367249 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56634 - "GET /api/images/3days?t=1762081367249 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50978 - "GET /api/images/5days?t=1762081367249 HTTP/1.1" 200 OK
+대기 시간: 0시간 0분 22초 남음대기 시간: 0시간 0분 21초 남음대기 시간: 0시간 0분 20초 남음INFO:     106.101.68.2:14686 - "GET /api/status HTTP/1.1" 200 OK
+INFO:     106.101.68.2:50140 - "GET /api/trades HTTP/1.1" 200 OK
+INFO:     106.101.68.2:37002 - "GET /api/results HTTP/1.1" 200 OK
+INFO:     106.101.68.2:50132 - "GET /api/images/3days?t=1762081369597 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:19492 - "GET /api/images/today?t=1762081369597 HTTP/1.1" 200 OK
+INFO:     106.101.68.2:19074 - "GET /api/images/5days?t=1762081369597 HTTP/1.1" 200 OK
