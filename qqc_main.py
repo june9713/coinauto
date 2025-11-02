@@ -433,6 +433,10 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         
         # 저장 시 백테스트에 사용된 데이터(df_for_backtest)를 전달
         # 전체 백테스트일 때는 전체 데이터, 증분 백테스트일 때는 마지막 56개
+        # 잔고 정보는 result에서 가져옴 (server mode에서 추가됨)
+        current_krw = result.get('current_krw_balance', None)
+        current_btc = result.get('current_btc_balance', None)
+
         data_manager.save_qqc_backtest_result(
             df=df_for_backtest,  # 백테스트에 사용된 데이터를 그대로 전달
             result=result,
@@ -448,7 +452,9 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
             price_slippage=price_slip_val,
             initial_capital=initial_cap_val,
             ticker=ticker,
-            interval=interval
+            interval=interval,
+            current_krw=current_krw,
+            current_btc=current_btc
         )
         
         print("\nQQC 백테스트 완료!")
@@ -708,7 +714,9 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
                     
                     # 공유 상태 업데이트
                     shared_state.update_trade_state(state)
-                    
+                    # Set initial_capital in shared_state
+                    shared_state.set_initial_capital(initial_capital)
+
                 except Exception as e:
                     err = traceback.format_exc()
                     print("err", err)
@@ -724,6 +732,8 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
             print("\n이전 거래 상태를 불러왔습니다.")
             initial_capital = saved_state.get('initial_capital', initial_capital or Config.DEFAULT_INITIAL_CAPITAL)
             shared_state.update_trade_state(saved_state)
+            # Set initial_capital in shared_state
+            shared_state.set_initial_capital(initial_capital)
         
         # QQC 전략 변수 설정 (기본값 적용)
         volume_window_val = volume_window if volume_window is not None else 55
@@ -769,11 +779,11 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
                 if isinstance(testresult, dict):
                     backtest_status = testresult.get('last_trade_status', 'unknown')
                     print(f"\n백테스트 결과 상태: {backtest_status}")
-                    
+
                     # 상태 업데이트 및 실제 거래 실행
                     if saved_state is not None and trader is not None:
                         prev_status = saved_state.get('last_backtest_status', 'none')
-                        
+
                         # 실제 거래 실행
                         trade_executed = execute_real_trade(
                             trader=trader,
@@ -783,19 +793,41 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
                             state=saved_state,
                             buy_cash_ratio=buy_cash_ratio_val
                         )
-                        
+
                         # 상태 업데이트
                         saved_state['last_backtest_status'] = backtest_status
                         saved_state['last_update'] = pd.Timestamp.now()
-                        
+
                         # 실제 잔고 재조회 및 업데이트
                         try:
                             balance = trader.get_balance(ticker)
                             saved_state['actual_cash'] = balance['cash']
                             saved_state['actual_coin_amount'] = balance['coin']
+
+                            # 현재 BTC 가격 조회 (최근 백테스트 결과에서)
+                            btc_price = 0
+                            if testresult and 'result' in testresult:
+                                result_data = testresult['result']
+                                trades = result_data.get('trades', [])
+                                if trades and len(trades) > 0:
+                                    # 마지막 거래 가격을 현재 가격으로 사용
+                                    last_trade = trades[-1]
+                                    btc_price = last_trade.get('price', 0)
+
+                                # 결과에 잔고 정보 추가 (CSV 저장용)
+                                result_data['current_krw_balance'] = balance['cash']
+                                result_data['current_btc_balance'] = balance['coin']
+
+                            # 공유 상태에 잔고 업데이트
+                            if btc_price > 0:
+                                shared_state.update_balance(
+                                    krw=balance['cash'],
+                                    btc=balance['coin'],
+                                    btc_price=btc_price
+                                )
                         except Exception as e:
                             print(f"경고: 잔고 조회 실패: {str(e)}")
-                        
+
                         TradeStateManager.save_state(saved_state)
                         shared_state.update_trade_state(saved_state)
                     else:
@@ -991,9 +1023,31 @@ if __name__ == "__main__":
                     balance = trader.get_balance(ticker)
                     saved_state['actual_cash'] = balance['cash']
                     saved_state['actual_coin_amount'] = balance['coin']
+
+                    # 현재 BTC 가격 조회 (최근 백테스트 결과에서)
+                    btc_price = 0
+                    if testresult and 'result' in testresult:
+                        result_data = testresult['result']
+                        trades = result_data.get('trades', [])
+                        if trades and len(trades) > 0:
+                            # 마지막 거래 가격을 현재 가격으로 사용
+                            last_trade = trades[-1]
+                            btc_price = last_trade.get('price', 0)
+
+                        # 결과에 잔고 정보 추가 (CSV 저장용)
+                        result_data['current_krw_balance'] = balance['cash']
+                        result_data['current_btc_balance'] = balance['coin']
+
+                    # 공유 상태에 잔고 업데이트 (서버 모드가 아닌 경우에도)
+                    if btc_price > 0:
+                        shared_state.update_balance(
+                            krw=balance['cash'],
+                            btc=balance['coin'],
+                            btc_price=btc_price
+                        )
                 except Exception as e:
                     print(f"경고: 잔고 조회 실패: {str(e)}")
-                
+
                 TradeStateManager.save_state(saved_state)
             else:
                 # 상태 저장되지 않았거나 trader가 없는 경우

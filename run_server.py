@@ -13,6 +13,8 @@ import uvicorn
 from qqc_main import run_server_mode
 from shared_state import shared_state
 from config import Config
+from balance_visualizer import BalanceVisualizer
+from condition_manager import ConditionManager
 
 
 app = FastAPI(title="QQC 백테스트 모니터링 서버", version="1.0.0")
@@ -97,10 +99,13 @@ async def root():
             "version": "1.0.0",
             "endpoints": {
                 "/api/status": "현재 상태 조회",
+                "/api/balance": "현재 잔고 조회 (KRW, BTC)",
+                "/api/assets_history": "총 자산 변동 이력 조회",
                 "/api/trades": "거래 기록 조회",
                 "/api/results": "백테스트 결과 조회",
                 "/api/logs": "에러 로그 조회",
                 "/api/images/{image_type}": "이미지 조회 (today, 3days, 5days)",
+                "/api/images/balance_history": "잔고 변동 이력 그래프 이미지",
                 "/logs": "로그 페이지"
             }
         }
@@ -175,11 +180,81 @@ async def get_logs():
         raise HTTPException(status_code=500, detail=f"로그 조회 실패: {str(e)}")
 
 
+@app.get("/api/balance")
+async def get_balance():
+    """현재 잔고 조회"""
+    try:
+        balance = shared_state.get_balance()
+        if balance is None:
+            return JSONResponse(content={
+                "error": "잔고 정보가 아직 없습니다.",
+                "balance": None
+            })
+        return JSONResponse(content=balance)
+    except Exception as e:
+        err = traceback.format_exc()
+        print("err", err)
+        raise HTTPException(status_code=500, detail=f"잔고 조회 실패: {str(e)}")
+
+
+@app.get("/api/assets_history")
+async def get_assets_history():
+    """총 자산 변동 이력 조회"""
+    try:
+        history = shared_state.get_total_assets_history()
+        return JSONResponse(content={
+            "history": history,
+            "count": len(history)
+        })
+    except Exception as e:
+        err = traceback.format_exc()
+        print("err", err)
+        raise HTTPException(status_code=500, detail=f"자산 변동 이력 조회 실패: {str(e)}")
+
+
+@app.get("/api/images/balance_history")
+async def get_balance_history_image():
+    """잔고 변동 이력 그래프 이미지 조회"""
+    try:
+        # 현재 조건 로드
+        condition = ConditionManager.load_condition()
+
+        # 잔고 이력 그래프 생성
+        visualizer = BalanceVisualizer()
+        ticker = condition.get('ticker', 'BTC') if condition else 'BTC'
+
+        output_path = './images/balance_history.jpg'
+        image_path = visualizer.plot_balance_history(
+            ticker=ticker,
+            condition_dict=condition,
+            output_path=output_path
+        )
+
+        if image_path is None or not os.path.exists(image_path):
+            raise HTTPException(
+                status_code=404,
+                detail="잔고 이력 그래프를 생성할 수 없습니다. 데이터가 없거나 생성 중 오류가 발생했습니다."
+            )
+
+        return FileResponse(
+            image_path,
+            media_type="image/jpeg",
+            filename="balance_history.jpg"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        err = traceback.format_exc()
+        print("err", err)
+        raise HTTPException(status_code=500, detail=f"잔고 이력 그래프 조회 실패: {str(e)}")
+
+
 @app.get("/api/images/{image_type}")
 async def get_image(image_type: str):
     """
     이미지 조회
-    
+
     Parameters:
     - image_type: 'today', '3days', '5days'
     """
@@ -255,10 +330,10 @@ async def start_background_task():
     """백그라운드 작업 시작"""
     try:
         global _background_thread
-        
+
         if _background_thread is not None and _background_thread.is_alive():
             return JSONResponse(content={"message": "이미 실행 중입니다."})
-        
+
         shared_state.set_running(True)
         _background_thread = threading.Thread(
             target=_run_background_task,
@@ -266,12 +341,38 @@ async def start_background_task():
             name="QQCBackgroundTask"
         )
         _background_thread.start()
-        
+
         return JSONResponse(content={"message": "백그라운드 작업 시작됨"})
     except Exception as e:
         err = traceback.format_exc()
         print("err", err)
         raise HTTPException(status_code=500, detail=f"작업 시작 실패: {str(e)}")
+
+
+@app.post("/api/initial_capital")
+async def set_initial_capital(request: dict):
+    """초기 자산 설정"""
+    try:
+        initial_capital = request.get('initial_capital')
+
+        if initial_capital is None:
+            raise HTTPException(status_code=400, detail="initial_capital is required")
+
+        if not isinstance(initial_capital, (int, float)) or initial_capital < 0:
+            raise HTTPException(status_code=400, detail="initial_capital must be a non-negative number")
+
+        shared_state.set_initial_capital(float(initial_capital))
+
+        return JSONResponse(content={
+            "message": "초기 자산이 설정되었습니다.",
+            "initial_capital": initial_capital
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        err = traceback.format_exc()
+        print("err", err)
+        raise HTTPException(status_code=500, detail=f"초기 자산 설정 실패: {str(e)}")
 
 
 if __name__ == "__main__":

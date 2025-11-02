@@ -869,7 +869,8 @@ class DataManager:
                                 volume_window, ma_window, volume_multiplier,
                                 buy_cash_ratio, hold_period, profit_target, stop_loss,
                                 price_slippage, initial_capital,
-                                ticker='BTC', interval='24h'):
+                                ticker='BTC', interval='24h',
+                                current_krw=None, current_btc=None):
         """
         QQC 백테스트 결과를 파일에 저장합니다.
         각 거래를 별도 행으로 저장합니다.
@@ -986,7 +987,11 @@ class DataManager:
                     'profit_percent': trade.get('profit_percent', None),
                     'volume_a': trade.get('volume_a', None),
                     'ma_c': trade.get('ma_c', None),
-                    'total_asset_after_trade': trade.get('total_asset', None)
+                    'total_asset_after_trade': trade.get('total_asset', None),
+                    # 실제 잔고 정보
+                    'current_krw_balance': current_krw,
+                    'current_btc_balance': current_btc,
+                    'total_balance': (current_krw + (current_btc * trade.get('price', 0))) if (current_krw is not None and current_btc is not None) else None
                 }
                 new_rows.append(row)
             
@@ -1026,7 +1031,11 @@ class DataManager:
                     'profit_percent': None,
                     'volume_a': None,
                     'ma_c': None,
-                    'total_asset_after_trade': None
+                    'total_asset_after_trade': None,
+                    # 실제 잔고 정보
+                    'current_krw_balance': current_krw,
+                    'current_btc_balance': current_btc,
+                    'total_balance': (current_krw + (current_btc * price_at_end)) if (current_krw is not None and current_btc is not None and price_at_end is not None) else None
                 }
                 new_rows.append(row)
             

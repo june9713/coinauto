@@ -32,6 +32,9 @@ class SharedState:
         self.is_running: bool = False
         self.last_error: Optional[str] = None
         self.error_logs: List[Dict[str, Any]] = []  # 에러 로그 저장
+        self.current_balance: Optional[Dict[str, Any]] = None  # 현재 잔고 (KRW, BTC)
+        self.total_assets_history: List[Dict[str, Any]] = []  # 총 자산 변동 이력
+        self.initial_capital: Optional[float] = None  # 초기 자산
     
     def update_backtest_result(self, result: Dict[str, Any], trades: List[Dict[str, Any]]):
         """
@@ -211,6 +214,88 @@ class SharedState:
         with self._lock:
             # 최신 로그가 먼저 오도록 역순으로 반환
             return list(reversed(self.error_logs.copy()))
+
+    def update_balance(self, krw: float, btc: float, btc_price: float):
+        """
+        현재 잔고 업데이트
+
+        Parameters:
+        - krw (float): KRW 잔고
+        - btc (float): BTC 보유량
+        - btc_price (float): 현재 BTC 가격
+        """
+        try:
+            with self._lock:
+                total_assets = krw + (btc * btc_price)
+                self.current_balance = {
+                    'krw': krw,
+                    'btc': btc,
+                    'btc_price': btc_price,
+                    'total_assets': total_assets,
+                    'timestamp': datetime.now().isoformat()
+                }
+
+                # 총 자산 변동 이력에 추가 (최대 1000개까지만 보관)
+                self.total_assets_history.append({
+                    'timestamp': datetime.now().isoformat(),
+                    'total_assets': total_assets,
+                    'krw': krw,
+                    'btc': btc,
+                    'btc_price': btc_price
+                })
+
+                # 히스토리가 1000개를 초과하면 오래된 것부터 삭제
+                if len(self.total_assets_history) > 1000:
+                    self.total_assets_history = self.total_assets_history[-1000:]
+        except Exception as e:
+            err = traceback.format_exc()
+            print("err", err)
+            raise
+
+    def get_balance(self) -> Optional[Dict[str, Any]]:
+        """
+        현재 잔고 조회 (스레드 안전)
+
+        Returns:
+        - dict: 현재 잔고 정보
+        """
+        with self._lock:
+            if self.current_balance is None:
+                return None
+            balance = self.current_balance.copy()
+            # Add initial_capital to the balance response
+            balance['initial_capital'] = self.initial_capital
+            return balance
+
+    def get_total_assets_history(self) -> List[Dict[str, Any]]:
+        """
+        총 자산 변동 이력 조회 (스레드 안전)
+
+        Returns:
+        - list: 총 자산 변동 이력 리스트
+        """
+        with self._lock:
+            return self.total_assets_history.copy()
+
+    def set_initial_capital(self, initial_capital: float):
+        """
+        초기 자산 설정
+
+        Parameters:
+        - initial_capital (float): 초기 자산
+        """
+        with self._lock:
+            self.initial_capital = initial_capital
+
+    def get_initial_capital(self) -> Optional[float]:
+        """
+        초기 자산 조회 (스레드 안전)
+
+        Returns:
+        - float: 초기 자산
+        """
+        with self._lock:
+            return self.initial_capital
     
     def _serialize_value(self, value: Any) -> Any:
         """

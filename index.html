@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QQC Backtest Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -440,15 +441,44 @@
                 </div>
             </div>
 
+            <!-- Current Balance Card -->
+            <div class="card">
+                <div class="card-title">💰 Current Balance</div>
+                <div id="balanceContent" class="loading">Loading...</div>
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e2e8f0;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #475569;">초기 자산 (KRW)</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="number" id="initialCapitalInput" placeholder="초기 자산 입력" style="flex: 1; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1em;">
+                        <button onclick="updateInitialCapital()" style="padding: 10px 20px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">설정</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Results Summary Card -->
             <div class="card">
-                <div class="card-title">💰 Performance Summary</div>
+                <div class="card-title">📊 Performance Summary</div>
                 <div id="resultsContent" class="loading">Loading...</div>
+            </div>
+
+            <!-- Total Assets History Chart -->
+            <div class="card wide-card">
+                <div class="card-title">📈 Total Assets History (Live)</div>
+                <div class="chart-container">
+                    <canvas id="assetsChart" style="max-height: 400px;"></canvas>
+                </div>
+            </div>
+
+            <!-- Balance History from CSV -->
+            <div class="card wide-card">
+                <div class="card-title">💹 Balance History (From CSV Records)</div>
+                <div class="chart-container">
+                    <img id="img-balance-history" src="/api/images/balance_history" alt="Balance History" onerror="this.src=''; this.alt='Balance history not available yet. Data will be recorded after trading.'" style="max-width: 100%; height: auto;">
+                </div>
             </div>
 
             <!-- Charts Card -->
             <div class="card wide-card">
-                <div class="card-title">📈 Charts</div>
+                <div class="card-title">📉 Backtest Charts</div>
                 <div class="tabs">
                     <button class="tab active" onclick="showChart('today')">Today</button>
                     <button class="tab" onclick="showChart('3days')">3 Days</button>
@@ -486,6 +516,7 @@
 
     <script>
         let autoRefreshInterval = null;
+        let assetsChart = null;
         const API_BASE = window.location.origin;
 
         // Initialize
@@ -496,8 +527,10 @@
 
         function loadAll() {
             loadStatus();
+            loadBalance();
             loadResults();
             loadTrades();
+            loadAssetsHistory();
             refreshCharts();
         }
 
@@ -547,6 +580,71 @@
                 console.error('Failed to load status:', error);
                 document.getElementById('statusContent').innerHTML =
                     `<div class="error">Failed to load status</div>`;
+            }
+        }
+
+        async function loadBalance() {
+            try {
+                const response = await fetch(`${API_BASE}/api/balance`);
+                const data = await response.json();
+                const content = document.getElementById('balanceContent');
+
+                if (data.error || !data.krw) {
+                    content.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-state-icon">💰</div>
+                            <p>No balance data yet</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const totalClass = 'positive';
+
+                // Calculate asset increase rate if initial_capital is available and not zero
+                let assetIncreaseRateHtml = '';
+                if (data.initial_capital && data.initial_capital !== 0) {
+                    const increaseRate = ((data.total_assets / data.initial_capital) * 100.0).toFixed(2);
+                    const increaseClass = increaseRate >= 100 ? 'positive' : 'negative';
+                    assetIncreaseRateHtml = `
+                        <div class="stat-item">
+                            <div class="stat-label">자산 증가율</div>
+                            <div class="stat-value ${increaseClass}">${increaseRate}%</div>
+                        </div>
+                    `;
+                }
+
+                // Update initial capital input field
+                const initialCapitalInput = document.getElementById('initialCapitalInput');
+                if (initialCapitalInput && data.initial_capital) {
+                    initialCapitalInput.value = parseInt(data.initial_capital || 0);
+                }
+
+                content.innerHTML = `
+                    <div class="stat-grid">
+                        <div class="stat-item">
+                            <div class="stat-label">KRW Balance</div>
+                            <div class="stat-value">${parseInt(data.krw || 0).toLocaleString()} KRW</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">BTC Balance</div>
+                            <div class="stat-value">${parseFloat(data.btc || 0).toFixed(8)} BTC</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">BTC Price</div>
+                            <div class="stat-value">${parseInt(data.btc_price || 0).toLocaleString()} KRW</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Total Assets</div>
+                            <div class="stat-value ${totalClass}">${parseInt(data.total_assets || 0).toLocaleString()} KRW</div>
+                        </div>
+                        ${assetIncreaseRateHtml}
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Failed to load balance:', error);
+                document.getElementById('balanceContent').innerHTML =
+                    `<div class="error">Failed to load balance</div>`;
             }
         }
 
@@ -601,6 +699,82 @@
                 console.error('Failed to load results:', error);
                 document.getElementById('resultsContent').innerHTML =
                     `<div class="error">Failed to load results</div>`;
+            }
+        }
+
+        async function loadAssetsHistory() {
+            try {
+                const response = await fetch(`${API_BASE}/api/assets_history`);
+                const data = await response.json();
+
+                if (!data.history || data.history.length === 0) {
+                    return;
+                }
+
+                // Prepare data for chart
+                const labels = data.history.map(item => {
+                    const date = new Date(item.timestamp);
+                    return date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+                });
+                const totalAssets = data.history.map(item => item.total_assets);
+
+                // Destroy existing chart if it exists
+                if (assetsChart) {
+                    assetsChart.destroy();
+                }
+
+                // Create new chart
+                const ctx = document.getElementById('assetsChart').getContext('2d');
+                assetsChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Total Assets (KRW)',
+                            data: totalAssets,
+                            borderColor: '#667eea',
+                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.dataset.label + ': ' + parseInt(context.parsed.y).toLocaleString() + ' KRW';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                ticks: {
+                                    callback: function(value) {
+                                        return parseInt(value).toLocaleString();
+                                    }
+                                }
+                            },
+                            x: {
+                                ticks: {
+                                    maxRotation: 45,
+                                    minRotation: 45
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to load assets history:', error);
             }
         }
 
@@ -699,6 +873,12 @@
                     img.src = `${API_BASE}/api/images/${period}?t=${timestamp}`;
                 }
             });
+
+            // Refresh balance history image
+            const balanceHistoryImg = document.getElementById('img-balance-history');
+            if (balanceHistoryImg) {
+                balanceHistoryImg.src = `${API_BASE}/api/images/balance_history?t=${timestamp}`;
+            }
         }
 
         function toggleAutoRefresh() {
@@ -712,13 +892,45 @@
 
         function startAutoRefresh() {
             stopAutoRefresh(); // Clear any existing interval
-            autoRefreshInterval = setInterval(loadAll, 15000);
+            autoRefreshInterval = setInterval(loadAll, 30000);
         }
 
         function stopAutoRefresh() {
             if (autoRefreshInterval) {
                 clearInterval(autoRefreshInterval);
                 autoRefreshInterval = null;
+            }
+        }
+
+        async function updateInitialCapital() {
+            try {
+                const input = document.getElementById('initialCapitalInput');
+                const value = parseFloat(input.value);
+
+                if (isNaN(value) || value < 0) {
+                    alert('올바른 금액을 입력해주세요.');
+                    return;
+                }
+
+                const response = await fetch(`${API_BASE}/api/initial_capital`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ initial_capital: value })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('초기 자산이 설정되었습니다.');
+                    loadBalance(); // Reload balance to show the updated increase rate
+                } else {
+                    alert('초기 자산 설정 실패: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Failed to update initial capital:', error);
+                alert('초기 자산 설정 중 오류가 발생했습니다.');
             }
         }
     </script>
