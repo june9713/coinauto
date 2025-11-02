@@ -576,21 +576,21 @@ class QQCTestEngine:
     def run(self, df):
         """
         백테스트 전략 실행 (일괄 처리)
-        
+
         Parameters:
         - df (pd.DataFrame): OHLCV 데이터프레임
-        
+
         Returns:
         - dict: 백테스트 결과 딕셔너리
         """
         try:
             # 상태 초기화
             self.reset()
-            
+
             # 거래 기록
             trades = []
             asset_history = []
-            
+
             # 디버깅: 매수 조건 확인 통계 초기화
             self._condition_check_count = 0
             self._condition_b_satisfied = 0
@@ -599,11 +599,21 @@ class QQCTestEngine:
             self._all_conditions_satisfied = 0
             self._condition_b_all_check_count = 0
             self._condition_b_all_satisfied = 0
-            
+
+            # 거래량 평균과 이동평균 계산 (CSV 저장용)
+            # pandas rolling을 사용하여 벡터화된 계산
+            volume_avg_series = df['volume'].shift(1).rolling(window=self.volume_window, min_periods=1).mean()
+            ma_series = df['close'].shift(1).rolling(window=self.ma_window, min_periods=1).mean()
+
+            # 첫 번째 값 설정
+            if len(df) > 0:
+                volume_avg_series.iloc[0] = 0.0
+                ma_series.iloc[0] = df['close'].iloc[0]
+
             # 각 캔들을 하나씩 처리
             for idx in range(len(df)):
                 candle_row = df.iloc[idx]
-                
+
                 # 캔들 데이터 생성
                 candle_data = {
                     'date': candle_row.name if hasattr(candle_row, 'name') else df.index[idx],
@@ -613,53 +623,23 @@ class QQCTestEngine:
                     'close': candle_row['close'],
                     'volume': candle_row['volume']
                 }
-                
+
                 # 절대 인덱스 저장 (보유 기간 계산용)
                 self._current_absolute_index = idx
-                
+
                 # 캔들 추가 및 처리
                 result = self.add_candle(candle_data)
-                
+
                 # 결과 기록
                 if result['trade'] is not None:
                     trades.append(result['trade'])
-                
+
                 asset_history.append(result['asset_history'])
             
-            # 마지막 캔들에서 조건을 만족했지만 다음 캔들이 없어서 매수가 실행되지 않은 경우 처리
+            # 마지막 캔들에서 조건을 만족했지만 다음 캔들이 없어서 매수가 실행되지 않은 경우
+            # 주의: 중복 거래 방지를 위해 마지막 캔들의 거래는 메인 루프에서만 처리
+            # 여기서는 플래그만 유지하고 다음 백테스트 실행 시 처리하도록 함
             last_pending_buy_executed = False
-            if self._pending_buy and not self._holding and len(df) > 0:
-                print(f"\n[디버깅] 마지막 캔들에서 매수 조건 충족, 즉시 매수 실행")
-                
-                # 마지막 캔들을 버퍼에서 찾기
-                if len(self._candle_buffer) > 0:
-                    last_candle_in_buffer = self._candle_buffer[-1]
-                    last_candle_index_in_buffer = len(self._candle_buffer) - 1
-                    
-                    # 마지막 캔들 기준으로 매수 실행
-                    result = self._execute_buy_at_open(
-                        last_candle_in_buffer, 
-                        last_candle_index_in_buffer, 
-                        self._pending_buy_condition_date,
-                        self._pending_buy_absolute_index
-                    )
-                    
-                    # 결과 기록
-                    if result and result.get('trade') is not None:
-                        trades.append(result['trade'])
-                        last_pending_buy_executed = True  # 마지막 캔들에서 매수 실행됨을 표시
-                        
-                        # 자산 기록도 업데이트
-                        if len(asset_history) > 0:
-                            asset_history[-1] = result['asset_history']
-                        else:
-                            asset_history.append(result['asset_history'])
-                    
-                    # 플래그 초기화
-                    self._pending_buy = False
-                    self._pending_buy_condition_candle_index = None
-                    self._pending_buy_condition_date = None
-                    self._pending_buy_absolute_index = None
             
             # 최종 수익률 계산
             final_return = ((self._total_asset - self.initial_capital) / self.initial_capital) * 100
@@ -708,7 +688,9 @@ class QQCTestEngine:
                 'initial_capital': self.initial_capital,
                 'final_asset': self._total_asset,
                 'total_return': final_return,
-                'last_trade_status': last_trade_status
+                'last_trade_status': last_trade_status,
+                'volume_avg': volume_avg_series,  # 거래량 평균 (CSV 저장용)
+                'ma_values': ma_series  # 이동평균 (CSV 저장용)
             }
             
         except Exception as e:

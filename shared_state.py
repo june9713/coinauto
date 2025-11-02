@@ -38,8 +38,8 @@ class SharedState:
     
     def update_backtest_result(self, result: Dict[str, Any], trades: List[Dict[str, Any]]):
         """
-        백테스트 결과 업데이트
-        
+        백테스트 결과 업데이트 (중복 거래 제거)
+
         Parameters:
         - result: 백테스트 결과 딕셔너리
         - trades: 거래 리스트
@@ -47,8 +47,21 @@ class SharedState:
         try:
             with self._lock:
                 self.last_backtest_result = result
+
+                # 중복 제거: (date, action) 조합이 같은 거래는 한 번만 저장
+                seen = set()
+                unique_trades = []
+                for trade in trades:
+                    trade_key = (
+                        str(trade.get('date')),
+                        trade.get('action')
+                    )
+                    if trade_key not in seen:
+                        unique_trades.append(trade)
+                        seen.add(trade_key)
+
                 # trades를 JSON 직렬화 가능한 형태로 변환
-                self.last_backtest_trades = self._serialize_trades(trades)
+                self.last_backtest_trades = self._serialize_trades(unique_trades)
                 self.last_backtest_time = datetime.now()
                 if 'last_trade_status' in result:
                     self.current_status = result['last_trade_status']

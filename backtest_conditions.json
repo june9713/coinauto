@@ -7,7 +7,7 @@
   "profit_target": 17.6,
   "stop_loss": -28.6,
   "price_slippage": 1000,
-  "initial_capital": 27036.622803,
+  "initial_capital": 26943.651183,
   "ticker": "BTC",
   "interval": "3m"
 }

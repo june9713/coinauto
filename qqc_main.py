@@ -216,24 +216,30 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
             # 참고: 백테스트 엔진이 데이터를 수정하지 않으므로 view 사용 가능하나, 안전을 위해 복사 유지
             df_for_backtest = df.copy()  # 복사본 사용
         else:
+            # 증분 업데이트: 현재 시간을 기준으로 완료된 캔들만 선택
+            now = pd.Timestamp.now()
+            
+            # 현재 시간보다 미래의 캔들 데이터 제외
+            completed_candles_df = df[df.index <= now]
+            
+            print(f"  현재 시간 ({now.strftime('%Y-%m-%d %H:%M:%S')}) 기준으로 미래 캔들 제외: {len(df) - len(completed_candles_df)}개 제외됨")
+
             # 마지막 56개만 사용 (과거 55개 + 현재 1개)
-            # qqc_55.py와 동일한 로직: 마지막 57개 추출 후 마지막 1개 제외하여 56개 사용
-            required_count = volume_window_val + 2  # 57개 필요
-            if len(df) < required_count:
-                print(f"\n경고: 데이터가 부족합니다 (필요: 최소 {required_count}개, 현재: {len(df)}개)")
-                print("전체 데이터를 사용하여 백테스트를 실행합니다.")
-                df_for_backtest = df
+            required_count = volume_window_val + 1  # 56개 필요
+            if len(completed_candles_df) < required_count:
+                print(f"\n경고: 완료된 캔들 데이터가 부족합니다 (필요: 최소 {required_count}개, 현재: {len(completed_candles_df)}개)")
+                print("사용 가능한 모든 완료된 캔들을 사용하여 백테스트를 실행합니다.")
+                df_for_backtest = completed_candles_df.copy()
             else:
-                # 마지막 57개를 추출한 후, 마지막 1개를 제외하여 56개 사용
-                df_last_57 = df.tail(required_count)
-                df_for_backtest = df_last_57.iloc[:-1]  # 마지막 인덱스 제외
+                # 완료된 캔들 중 마지막 56개 사용
+                df_for_backtest = completed_candles_df.tail(required_count).copy()
                 
-                print(f"  → 부분 백테스트 모드: 기존 데이터가 있어서 마지막 56개만 백테스트 실행")
-                print(f"  백테스트 실행 데이터: 마지막 {required_count}개 추출 후 마지막 1개 제외 → {len(df_for_backtest)}개 사용")
+                print(f"  → 부분 백테스트 모드: 완료된 캔들 중 마지막 {len(df_for_backtest)}개만 백테스트 실행")
+                print(f"  백테스트 실행 데이터: {len(df_for_backtest)}개 사용")
                 print(f"  백테스트 실행 기간: {df_for_backtest.index[0]} ~ {df_for_backtest.index[-1]}")
-                print(f"    - 인덱스 0-{volume_window_val-1}: 과거 평균용 ({volume_window_val}개)")
-                print(f"    - 인덱스 {volume_window_val}: 현재 캔들")
-                print(f"    - 실제 데이터의 마지막 캔들(인덱스 {required_count-1})은 제외됨")
+                if len(df_for_backtest) >= required_count:
+                    print(f"    - 과거 평균용: {volume_window_val}개")
+                    print(f"    - 현재 캔들: 1개")
         
         # QQC 백테스트 실행
         print("\n[단계 2] QQC 백테스트 실행 중...")
@@ -266,6 +272,12 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         print(f"\n[백테스트 실행] 실제 사용 데이터: {len(df_for_backtest)}개")
         print(f"  실행 기간: {df_for_backtest.index[0]} ~ {df_for_backtest.index[-1]}")
         result = qqc_engine.run(df_for_backtest)
+
+        # 백테스트 결과에서 거래량 평균과 이동평균을 데이터프레임에 추가
+        if 'volume_avg' in result and 'ma_values' in result:
+            df_for_backtest = df_for_backtest.copy()
+            df_for_backtest['volume_avg'] = result['volume_avg']
+            df_for_backtest['ma_values'] = result['ma_values']
         
         # 백테스트 결과에서 마지막 거래 상태 확인
         last_trade_status = result.get('last_trade_status', 'unknown')
@@ -292,90 +304,35 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         print("\n[단계 4-1] 기존 백테스트 결과 로드 중...")
         historical_results_df = data_manager.load_backtest_results(ticker=ticker, condition_dict=current_condition)
 
-        # 기존 거래 내역을 result['trades']와 병합
-        if historical_results_df is not None and len(historical_results_df) > 0:
-            print(f"  기존 백테스트 결과: {len(historical_results_df)}개 기록 발견")
+        # 거래 내역 중복 제거 (현재 백테스트 결과만 사용)
+        # 주의: 과거 CSV와 병합하지 않고, 현재 백테스트 결과만 저장하여 중복 방지
+        current_trades = result.get('trades', [])
 
-            # historical_results_df에서 trade_date가 있는 행만 추출
-            historical_trades_df = historical_results_df[historical_results_df['trade_date'].notna()].copy()
+        # 중복 제거: (date, action) 조합이 같은 거래는 한 번만 유지
+        unique_trades_dict = {}
+        for trade in current_trades:
+            trade_date = trade['date']
+            if isinstance(trade_date, str):
+                trade_date = pd.to_datetime(trade_date)
+            action = trade.get('action', '')
+            trade_key = (str(trade_date), action)
 
-            if len(historical_trades_df) > 0:
-                # trade_date를 datetime으로 변환
-                historical_trades_df['trade_date'] = pd.to_datetime(historical_trades_df['trade_date'])
+            # 같은 키의 거래가 이미 있으면 최신 정보로 덮어쓰기
+            unique_trades_dict[trade_key] = trade
 
-                # 이미지 출력 기간 내의 거래만 필터링 (original_df_for_backtest 범위)
-                if len(original_df_for_backtest) > 0:
-                    backtest_start_date = original_df_for_backtest.index[0]
-                    backtest_end_date = original_df_for_backtest.index[-1]
+        # 중복 제거된 거래 리스트
+        unique_trades = list(unique_trades_dict.values())
 
-                    # 이미지 출력 기간 내의 거래만 선택
-                    historical_trades_df = historical_trades_df[
-                        (historical_trades_df['trade_date'] >= backtest_start_date) &
-                        (historical_trades_df['trade_date'] <= backtest_end_date)
-                    ]
+        # 날짜순으로 정렬
+        unique_trades.sort(key=lambda t: pd.to_datetime(t['date']) if isinstance(t['date'], str) else t['date'])
 
-                    if len(historical_trades_df) > 0:
-                        print(f"  이미지 출력 기간 내 기존 거래: {len(historical_trades_df)}개")
+        # result 업데이트
+        result['trades'] = unique_trades
+        result['total_trades'] = len(unique_trades)
+        result['buy_count'] = len([t for t in unique_trades if t['action'].startswith('BUY')])
+        result['sell_count'] = len([t for t in unique_trades if t['action'].startswith('SELL')])
 
-                        # 기존 거래를 result['trades'] 형식으로 변환
-                        historical_trades = []
-                        for _, row in historical_trades_df.iterrows():
-                            trade = {
-                                'date': row['trade_date'],
-                                'action': row.get('action', ''),
-                                'price': row.get('trade_price', None),
-                                'amount': row.get('trade_amount', None),
-                                'total_value': row.get('trade_total_value', None),
-                                'buy_price': row.get('buy_price', None),
-                                'buy_date': pd.to_datetime(row['buy_date']) if pd.notna(row.get('buy_date')) else None,
-                                'profit': row.get('profit', None),
-                                'profit_percent': row.get('profit_percent', None),
-                                'volume_a': row.get('volume_a', None),
-                                'ma_c': row.get('ma_c', None),
-                                'total_asset': row.get('total_asset_after_trade', None)
-                            }
-                            historical_trades.append(trade)
-
-                        # 현재 백테스트 결과의 거래와 병합
-                        current_trades = result.get('trades', [])
-
-                        # 중복 제거: trade_date와 action이 같은 거래는 현재 백테스트 결과 우선
-                        # 현재 백테스트의 거래 날짜 집합
-                        current_trade_keys = set()
-                        for trade in current_trades:
-                            trade_date = trade['date']
-                            if isinstance(trade_date, str):
-                                trade_date = pd.to_datetime(trade_date)
-                            action = trade.get('action', '')
-                            current_trade_keys.add((trade_date, action))
-
-                        # 기존 거래 중 현재 백테스트에 없는 거래만 추가
-                        for trade in historical_trades:
-                            trade_date = trade['date']
-                            if isinstance(trade_date, str):
-                                trade_date = pd.to_datetime(trade_date)
-                            action = trade.get('action', '')
-                            if (trade_date, action) not in current_trade_keys:
-                                current_trades.append(trade)
-
-                        # 날짜순으로 정렬
-                        current_trades.sort(key=lambda t: pd.to_datetime(t['date']) if isinstance(t['date'], str) else t['date'])
-
-                        # 병합된 거래 리스트를 result에 저장
-                        result['trades'] = current_trades
-                        result['total_trades'] = len(current_trades)
-                        result['buy_count'] = len([t for t in current_trades if t['action'].startswith('BUY')])
-                        result['sell_count'] = len([t for t in current_trades if t['action'].startswith('SELL')])
-
-                        print(f"  총 거래 병합 완료: {len(current_trades)}개 (기존 {len(historical_trades)}개 + 현재 백테스트)")
-                    else:
-                        print(f"  이미지 출력 기간 내 기존 거래 없음")
-                else:
-                    print(f"  백테스트 데이터가 비어있어 기존 거래 병합 생략")
-            else:
-                print(f"  기존 백테스트 결과에 거래 내역 없음")
-        else:
-            print(f"  기존 백테스트 결과 없음")
+        print(f"  중복 제거 완료: 총 {len(unique_trades)}개 거래 (매수 {result['buy_count']}개, 매도 {result['sell_count']}개)")
 
         # 기간별 그래프 생성
         print("\n[단계 4-2] 기간별 백테스트 결과 그래프 생성 중...")

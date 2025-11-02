@@ -18,12 +18,31 @@ class BalanceVisualizer:
         """초기화"""
         # 한글 폰트 설정 (한글이 깨지지 않도록)
         try:
-            if os.name == 'nt':  # Windows
-                font_name = 'Malgun Gothic'
-            elif os.name == 'posix':  # Linux, Mac
-                font_name = 'DejaVu Sans'
+            # Config에서 설정된 폰트 경로 사용
+            font_path = Config.FONT_PATH
 
-            rc('font', family=font_name)
+            if os.path.exists(font_path):
+                # 폰트 파일이 있으면 해당 폰트 사용
+                font_manager.fontManager.addfont(font_path)
+                font_prop = font_manager.FontProperties(fname=font_path)
+                font_name = font_prop.get_name()
+
+                # 폰트 설정 - 여러 방식으로 확실하게 적용
+                rc('font', family=font_name)
+                plt.rcParams['font.family'] = font_name
+                plt.rcParams['font.sans-serif'] = [font_name]
+
+                print(f"한글 폰트 설정 완료: {font_name}")
+            else:
+                # 폰트 파일이 없으면 OS별 기본 폰트 사용
+                if os.name == 'nt':  # Windows
+                    font_name = 'Malgun Gothic'
+                elif os.name == 'posix':  # Linux, Mac
+                    font_name = 'DejaVu Sans'
+
+                rc('font', family=font_name)
+                print(f"경고: 폰트 파일을 찾을 수 없습니다 ({font_path}). 기본 폰트 사용: {font_name}")
+
             plt.rcParams['axes.unicode_minus'] = False  # 마이너스 기호 깨짐 방지
         except Exception as e:
             print(f"경고: 폰트 설정 실패 ({e}). 기본 폰트 사용")

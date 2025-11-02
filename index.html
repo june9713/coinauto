@@ -813,7 +813,19 @@
                 data.trades.forEach(trade => {
                     const type = trade.type || trade.action || 'N/A';
                     const badgeClass = type.toLowerCase().includes('buy') ? 'badge-buy' : 'badge-sell';
-                    const plClass = parseFloat(trade.profit_loss || 0) >= 0 ? 'positive' : 'negative';
+
+                    // total_value 필드 사용 (total이 아님)
+                    const totalValue = parseInt(trade.total_value || 0);
+
+                    // profit 필드 사용 및 포맷팅
+                    let profitDisplay = '-';
+                    let plClass = 'positive';
+                    if (trade.profit !== undefined && trade.profit !== null) {
+                        const profit = parseFloat(trade.profit);
+                        plClass = profit >= 0 ? 'positive' : 'negative';
+                        const profitPercent = trade.profit_percent ? ` (${parseFloat(trade.profit_percent).toFixed(2)}%)` : '';
+                        profitDisplay = `${profit.toLocaleString()}${profitPercent}`;
+                    }
 
                     html += `
                         <tr>
@@ -821,8 +833,8 @@
                             <td><span class="badge ${badgeClass}">${type}</span></td>
                             <td>${parseInt(trade.price || 0).toLocaleString()}</td>
                             <td>${parseFloat(trade.amount || 0).toFixed(6)}</td>
-                            <td>${parseInt(trade.total || 0).toLocaleString()}</td>
-                            <td class="${plClass}">${trade.profit_loss || '-'}</td>
+                            <td>${totalValue.toLocaleString()}</td>
+                            <td class="${plClass}">${profitDisplay}</td>
                         </tr>
                     `;
                 });

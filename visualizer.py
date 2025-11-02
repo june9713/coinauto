@@ -80,11 +80,17 @@ class Visualizer:
                     # 폰트를 matplotlib에 등록
                     font_manager.fontManager.addfont(self.font_path)
                     Visualizer._font_registered.add(self.font_path)
-                
+
                 # 폰트 속성 가져오기
                 font_prop = font_manager.FontProperties(fname=self.font_path)
                 font_name = font_prop.get_name()
+
+                # 폰트 설정 - 여러 방식으로 확실하게 적용
                 rc('font', family=font_name)
+                matplotlib.rcParams['font.family'] = font_name
+                matplotlib.rcParams['font.sans-serif'] = [font_name]
+
+                print(f"한글 폰트 설정 완료: {font_name}")
             else:
                 # 폰트 파일이 없으면 기본 폰트 사용 시도
                 print(f"경고: 폰트 파일을 찾을 수 없습니다: {self.font_path}")
@@ -360,12 +366,18 @@ class Visualizer:
             high_prices = df['high'].values
             low_prices = df['low'].values
             
-            # 이동평균 계산 (현재 캔들을 제외한 과거 ma_window개 사용)
-            # pandas rolling을 사용하여 벡터화된 계산으로 속도 향상
-            ma_values = df['close'].shift(1).rolling(window=ma_window, min_periods=1).mean().values
-            # 첫 번째 값은 현재 값으로 설정 (과거 데이터가 없는 경우)
-            if len(ma_values) > 0:
-                ma_values[0] = close_prices[0]
+            # CSV에 저장된 이동평균 사용, 없으면 계산
+            if 'ma_values' in df.columns:
+                ma_values = df['ma_values'].values
+                print(f"  [그래프] CSV에서 저장된 이동평균 사용")
+            else:
+                # 이동평균 계산 (현재 캔들을 제외한 과거 ma_window개 사용)
+                # pandas rolling을 사용하여 벡터화된 계산으로 속도 향상
+                ma_values = df['close'].shift(1).rolling(window=ma_window, min_periods=1).mean().values
+                # 첫 번째 값은 현재 값으로 설정 (과거 데이터가 없는 경우)
+                if len(ma_values) > 0:
+                    ma_values[0] = close_prices[0]
+                print(f"  [그래프] 이동평균 실시간 계산 (CSV에 저장되지 않음)")
             
             # 음봉/양봉 판단
             is_bullish = open_prices < close_prices  # 양봉
@@ -477,7 +489,7 @@ class Visualizer:
     def _plot_volume_chart(self, ax, df, volume_window, volume_multiplier):
         """
         거래량 차트 플롯 (조건 B: 과거 n개 캔들의 거래량 평균값과 현재 거래량 비교)
-        
+
         Parameters:
         - ax: matplotlib axes 객체
         - df: OHLCV 데이터프레임
@@ -487,13 +499,19 @@ class Visualizer:
         try:
             dates = df.index
             volumes = df['volume'].values
-            
-            # 거래량 평균 계산 (현재 캔들을 제외한 과거 volume_window개 사용)
-            # QQC 엔진과 동일한 로직: pandas rolling을 사용하여 벡터화된 계산으로 속도 향상
-            volume_avg = df['volume'].shift(1).rolling(window=volume_window, min_periods=1).mean().values
-            # 첫 번째 값은 0으로 설정 (과거 데이터가 없는 경우)
-            if len(volume_avg) > 0:
-                volume_avg[0] = 0.0
+
+            # CSV에 저장된 거래량 평균 사용, 없으면 계산
+            if 'volume_avg' in df.columns:
+                volume_avg = df['volume_avg'].values
+                print(f"  [그래프] CSV에서 저장된 거래량 평균 사용")
+            else:
+                # 거래량 평균 계산 (현재 캔들을 제외한 과거 volume_window개 사용)
+                # QQC 엔진과 동일한 로직: pandas rolling을 사용하여 벡터화된 계산으로 속도 향상
+                volume_avg = df['volume'].shift(1).rolling(window=volume_window, min_periods=1).mean().values
+                # 첫 번째 값은 0으로 설정 (과거 데이터가 없는 경우)
+                if len(volume_avg) > 0:
+                    volume_avg[0] = 0.0
+                print(f"  [그래프] 거래량 평균 실시간 계산 (CSV에 저장되지 않음)")
             
             # 거래량 임계값 (평균 * 배수)
             volume_threshold = volume_avg * volume_multiplier
@@ -546,7 +564,7 @@ class Visualizer:
     def _plot_condition_b_chart(self, ax, df, volume_window, volume_multiplier):
         """
         조건 B 만족 구간 차트 (현재 거래량 >= 거래량 평균 * 배수)
-        
+
         Parameters:
         - ax: matplotlib axes 객체
         - df: OHLCV 데이터프레임
@@ -557,11 +575,15 @@ class Visualizer:
             dates = df.index
             close_prices = df['close'].values
             volumes = df['volume'].values
-            
-            # 거래량 평균 계산 (벡터화하여 속도 향상)
-            volume_avg = df['volume'].shift(1).rolling(window=volume_window, min_periods=1).mean().values
-            if len(volume_avg) > 0:
-                volume_avg[0] = 0.0
+
+            # CSV에 저장된 거래량 평균 사용, 없으면 계산
+            if 'volume_avg' in df.columns:
+                volume_avg = df['volume_avg'].values
+            else:
+                # 거래량 평균 계산 (벡터화하여 속도 향상)
+                volume_avg = df['volume'].shift(1).rolling(window=volume_window, min_periods=1).mean().values
+                if len(volume_avg) > 0:
+                    volume_avg[0] = 0.0
             
             # 조건 B 확인
             condition_b = volumes >= (volume_avg * volume_multiplier)
@@ -619,7 +641,7 @@ class Visualizer:
     def _plot_condition_d_chart(self, ax, df, ma_window):
         """
         조건 D 만족 구간 차트 (현재 종가 > 이동평균)
-        
+
         Parameters:
         - ax: matplotlib axes 객체
         - df: OHLCV 데이터프레임
@@ -628,11 +650,15 @@ class Visualizer:
         try:
             dates = df.index
             close_prices = df['close'].values
-            
-            # 이동평균 계산 (벡터화하여 속도 향상)
-            ma_values = df['close'].shift(1).rolling(window=ma_window, min_periods=1).mean().values
-            if len(ma_values) > 0:
-                ma_values[0] = close_prices[0]
+
+            # CSV에 저장된 이동평균 사용, 없으면 계산
+            if 'ma_values' in df.columns:
+                ma_values = df['ma_values'].values
+            else:
+                # 이동평균 계산 (벡터화하여 속도 향상)
+                ma_values = df['close'].shift(1).rolling(window=ma_window, min_periods=1).mean().values
+                if len(ma_values) > 0:
+                    ma_values[0] = close_prices[0]
             
             # 조건 D 확인
             condition_d = close_prices > ma_values
@@ -797,17 +823,25 @@ class Visualizer:
             
             # 조건 계산 (벡터화하여 속도 향상)
             # 조건 B: 현재 거래량 >= 거래량 평균 * volume_multiplier
-            # 현재 캔들을 제외한 과거 volume_window개 사용
-            volume_avg = df['volume'].shift(1).rolling(window=volume_window, min_periods=1).mean().values
-            if len(volume_avg) > 0:
-                volume_avg[0] = 0.0
+            # CSV에 저장된 거래량 평균 사용, 없으면 계산
+            if 'volume_avg' in df.columns:
+                volume_avg = df['volume_avg'].values
+            else:
+                # 거래량 평균 계산 (현재 캔들을 제외한 과거 volume_window개 사용)
+                volume_avg = df['volume'].shift(1).rolling(window=volume_window, min_periods=1).mean().values
+                if len(volume_avg) > 0:
+                    volume_avg[0] = 0.0
             condition_b = volumes >= (volume_avg * volume_multiplier)
             
             # 조건 D: 현재 종가 > 이동평균
-            # 현재 캔들을 제외한 과거 ma_window개 사용
-            ma_values = df['close'].shift(1).rolling(window=ma_window, min_periods=1).mean().values
-            if len(ma_values) > 0:
-                ma_values[0] = close_prices[0]
+            # CSV에 저장된 이동평균 사용, 없으면 계산
+            if 'ma_values' in df.columns:
+                ma_values = df['ma_values'].values
+            else:
+                # 이동평균 계산 (현재 캔들을 제외한 과거 ma_window개 사용)
+                ma_values = df['close'].shift(1).rolling(window=ma_window, min_periods=1).mean().values
+                if len(ma_values) > 0:
+                    ma_values[0] = close_prices[0]
             condition_d = close_prices > ma_values
             
             # 조건 E: 양봉 (오픈가 < 종가)

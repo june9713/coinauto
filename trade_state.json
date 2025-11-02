@@ -1,10 +1,10 @@
 {
   "initialized": true,
-  "initial_capital": 27036.622803,
+  "initial_capital": 26943.651183,
   "actual_cash": 26943.651183,
   "actual_coin_amount": 0.0,
   "ticker": "BTC",
-  "last_backtest_status": "sell",
-  "last_update": "2025-11-02T21:12:17.847841",
+  "last_backtest_status": "none",
+  "last_update": "2025-11-02T22:36:18.038282",
   "sync_needed": false
 }
