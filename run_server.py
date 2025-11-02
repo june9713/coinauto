@@ -4,6 +4,9 @@ FastAPI 웹 서버를 통한 QQC 백테스트 실시간 모니터링
 import os
 import traceback
 import threading
+import asyncio
+from contextlib import asynccontextmanager
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,25 +19,18 @@ from config import Config
 from balance_visualizer import BalanceVisualizer
 from condition_manager import ConditionManager
 
-
-app = FastAPI(title="QQC 백테스트 모니터링 서버", version="1.0.0")
-
-# CORS 설정 (외부 접근 허용)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # 프로덕션에서는 특정 도메인만 허용하도록 수정
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# 블로킹 작업을 처리하기 위한 ThreadPoolExecutor
+# CPU 집약적 작업 (그래프 생성 등)을 위한 워커 풀
+_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="blocking_task")
 
 # 백그라운드 실행 스레드
 _background_thread: Optional[threading.Thread] = None
 
 
-@app.on_event("startup")
-async def startup_event():
-    """서버 시작 시 백그라운드 작업 시작"""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """애플리케이션 생명주기 관리 (시작/종료 이벤트)"""
+    # Startup
     global _background_thread
     
     print("="*80)
@@ -50,14 +46,34 @@ async def startup_event():
         )
         _background_thread.start()
         print("백그라운드 백테스트 작업 시작됨")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """서버 종료 시 백그라운드 작업 중지"""
+    
+    yield
+    
+    # Shutdown
     print("서버 종료 중...")
     shared_state.set_running(False)
     print("백그라운드 작업 중지 요청됨")
+    # ThreadPoolExecutor 종료
+    _executor.shutdown(wait=False)
+    print("ThreadPoolExecutor 종료됨")
+
+
+app = FastAPI(
+    title="QQC 백테스트 모니터링 서버",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# CORS 설정 (외부 접근 허용)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 프로덕션에서는 특정 도메인만 허용하도록 수정
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 
 
 def _run_background_task():
@@ -91,7 +107,9 @@ def _run_background_task():
 async def root():
     """루트 경로 - HTML 대시보드 제공"""
     html_path = os.path.join(os.getcwd(), 'index.html')
-    if os.path.exists(html_path):
+    # 파일 존재 확인을 비동기로 처리
+    exists = await asyncio.to_thread(os.path.exists, html_path)
+    if exists:
         return FileResponse(html_path, media_type="text/html")
     else:
         return {
@@ -115,7 +133,8 @@ async def root():
 async def logs_page():
     """로그 페이지 제공"""
     html_path = os.path.join(os.getcwd(), 'logs.html')
-    if os.path.exists(html_path):
+    exists = await asyncio.to_thread(os.path.exists, html_path)
+    if exists:
         return FileResponse(html_path, media_type="text/html")
     else:
         raise HTTPException(status_code=404, detail="로그 페이지를 찾을 수 없습니다.")
@@ -125,7 +144,8 @@ async def logs_page():
 async def get_status():
     """현재 상태 조회"""
     try:
-        status = shared_state.get_status()
+        # shared_state.get_status()는 lock을 사용하지만 빠르므로 비동기로 처리
+        status = await asyncio.to_thread(shared_state.get_status)
         return JSONResponse(content=status)
     except Exception as e:
         err = traceback.format_exc()
@@ -137,7 +157,7 @@ async def get_status():
 async def get_trades():
     """거래 기록 조회"""
     try:
-        trades = shared_state.get_trades()
+        trades = await asyncio.to_thread(shared_state.get_trades)
         return JSONResponse(content={
             "trades": trades,
             "count": len(trades)
@@ -152,7 +172,7 @@ async def get_trades():
 async def get_results():
     """백테스트 결과 조회"""
     try:
-        result = shared_state.get_backtest_result()
+        result = await asyncio.to_thread(shared_state.get_backtest_result)
         if result is None:
             return JSONResponse(content={
                 "error": "백테스트 결과가 아직 없습니다.",
@@ -169,7 +189,7 @@ async def get_results():
 async def get_logs():
     """에러 로그 조회"""
     try:
-        logs = shared_state.get_error_logs()
+        logs = await asyncio.to_thread(shared_state.get_error_logs)
         return JSONResponse(content={
             "logs": logs,
             "count": len(logs)
@@ -184,7 +204,7 @@ async def get_logs():
 async def get_balance():
     """현재 잔고 조회"""
     try:
-        balance = shared_state.get_balance()
+        balance = await asyncio.to_thread(shared_state.get_balance)
         if balance is None:
             return JSONResponse(content={
                 "error": "잔고 정보가 아직 없습니다.",
@@ -201,7 +221,7 @@ async def get_balance():
 async def get_assets_history():
     """총 자산 변동 이력 조회"""
     try:
-        history = shared_state.get_total_assets_history()
+        history = await asyncio.to_thread(shared_state.get_total_assets_history)
         return JSONResponse(content={
             "history": history,
             "count": len(history)
@@ -216,21 +236,26 @@ async def get_assets_history():
 async def get_balance_history_image():
     """잔고 변동 이력 그래프 이미지 조회"""
     try:
-        # 현재 조건 로드
-        condition = ConditionManager.load_condition()
+        # 현재 조건 로드를 비동기로 처리 (파일 I/O)
+        condition = await asyncio.to_thread(ConditionManager.load_condition)
 
-        # 잔고 이력 그래프 생성
+        # 잔고 이력 그래프 생성을 비동기로 처리 (긴 블로킹 작업)
         visualizer = BalanceVisualizer()
         ticker = condition.get('ticker', 'BTC') if condition else 'BTC'
-
         output_path = './images/balance_history.jpg'
-        image_path = visualizer.plot_balance_history(
-            ticker=ticker,
-            condition_dict=condition,
-            output_path=output_path
+        
+        # CPU/IO 집약적 작업을 ThreadPoolExecutor에서 실행
+        loop = asyncio.get_event_loop()
+        image_path = await loop.run_in_executor(
+            _executor,
+            visualizer.plot_balance_history,
+            ticker,
+            condition,
+            output_path
         )
 
-        if image_path is None or not os.path.exists(image_path):
+        # 파일 존재 확인도 비동기로 처리
+        if image_path is None or not await asyncio.to_thread(os.path.exists, image_path):
             raise HTTPException(
                 status_code=404,
                 detail="잔고 이력 그래프를 생성할 수 없습니다. 데이터가 없거나 생성 중 오류가 발생했습니다."
@@ -272,37 +297,58 @@ async def get_image(image_type: str):
                 detail=f"지원하지 않는 이미지 타입: {image_type}. 지원 타입: today, 3days, 5days"
             )
         
-        # 공유 상태에서 이미지 경로 조회
-        status = shared_state.get_status()
+        # 공유 상태에서 이미지 경로 조회 (비동기)
+        status = await asyncio.to_thread(shared_state.get_status)
         image_path = status.get('image_paths', {}).get(image_type)
         
-        # 경로가 없거나 파일이 존재하지 않으면 기본 경로에서 찾기
-        if image_path is None or not os.path.exists(image_path):
-            # 기본 이미지 디렉토리에서 찾기
+        # 경로 처리 및 파일 존재 확인을 비동기로 처리
+        def resolve_image_path():
+            """이미지 경로를 해결하는 동기 함수"""
+            resolved_path = image_path
+            # 경로가 없거나 파일이 존재하지 않으면 기본 경로에서 찾기
+            if resolved_path is None or not os.path.exists(resolved_path):
+                # 기본 이미지 디렉토리에서 찾기
+                base_dir = os.path.join(os.getcwd(), 'images')
+                resolved_path = os.path.join(base_dir, image_files[image_type])
+            
+            # 상대 경로 처리
+            if not os.path.isabs(resolved_path):
+                # './' 로 시작하는 경우 제거
+                if resolved_path.startswith('./'):
+                    resolved_path = resolved_path[2:]
+                resolved_path = os.path.join(os.getcwd(), resolved_path)
+            
+            # 경로 정규화 (중복 경로 구분자 제거)
+            resolved_path = os.path.normpath(resolved_path)
+            
+            # 파일 존재 확인
+            if not os.path.exists(resolved_path):
+                # HTTPException 대신 None 반환 (비동기 컨텍스트에서 처리)
+                return None
+            
+            return resolved_path
+        
+        # 경로 해결을 비동기로 실행
+        final_image_path = await asyncio.to_thread(resolve_image_path)
+        
+        # 파일이 없는 경우 에러 처리
+        if final_image_path is None:
+            # 기본 경로 다시 시도
             base_dir = os.path.join(os.getcwd(), 'images')
-            image_path = os.path.join(base_dir, image_files[image_type])
-        
-        # 상대 경로 처리
-        if not os.path.isabs(image_path):
-            # './' 로 시작하는 경우 제거
-            if image_path.startswith('./'):
-                image_path = image_path[2:]
-            image_path = os.path.join(os.getcwd(), image_path)
-        
-        # 경로 정규화 (중복 경로 구분자 제거)
-        image_path = os.path.normpath(image_path)
-        
-        # 파일 존재 확인
-        if not os.path.exists(image_path):
-            raise HTTPException(
-                status_code=404,
-                detail=f"이미지 파일을 찾을 수 없습니다: {image_path}"
-            )
+            default_path = os.path.join(base_dir, image_files[image_type])
+            final_image_path = os.path.normpath(default_path)
+            
+            # 최종 확인
+            if not await asyncio.to_thread(os.path.exists, final_image_path):
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"이미지 파일을 찾을 수 없습니다: {final_image_path}"
+                )
         
         return FileResponse(
-            image_path,
+            final_image_path,
             media_type="image/png",
-            filename=os.path.basename(image_path)
+            filename=os.path.basename(final_image_path)
         )
         
     except HTTPException:
@@ -317,7 +363,7 @@ async def get_image(image_type: str):
 async def stop_background_task():
     """백그라운드 작업 중지"""
     try:
-        shared_state.set_running(False)
+        await asyncio.to_thread(shared_state.set_running, False)
         return JSONResponse(content={"message": "백그라운드 작업 중지 요청됨"})
     except Exception as e:
         err = traceback.format_exc()
@@ -361,7 +407,7 @@ async def set_initial_capital(request: dict):
         if not isinstance(initial_capital, (int, float)) or initial_capital < 0:
             raise HTTPException(status_code=400, detail="initial_capital must be a non-negative number")
 
-        shared_state.set_initial_capital(float(initial_capital))
+        await asyncio.to_thread(shared_state.set_initial_capital, float(initial_capital))
 
         return JSONResponse(content={
             "message": "초기 자산이 설정되었습니다.",
@@ -379,15 +425,22 @@ if __name__ == "__main__":
     # 서버 실행
     port = int(os.getenv("PORT", "8000"))
     host = os.getenv("HOST", "0.0.0.0")
+    # 워커 수 설정 (환경변수에서 읽거나 기본값 사용)
+    # 기본값: CPU 코어 수, 최소 2개, 최대 8개
+    import multiprocessing
+    workers = int(os.getenv("WORKERS", min(max(multiprocessing.cpu_count(), 2), 8)))
     
     print(f"서버 시작: http://{host}:{port}")
+    print(f"워커 수: {workers}")
     print(f"API 문서: http://{host}:{port}/docs")
     print(f"대체 문서: http://{host}:{port}/redoc")
     
+    # workers를 사용할 때는 import string을 사용해야 함
     uvicorn.run(
-        app,
+        "run_server:app",  # import string 사용
         host=host,
         port=port,
+        workers=workers,
         log_level="info"
     )
 

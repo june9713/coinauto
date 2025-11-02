@@ -472,7 +472,7 @@
             <div class="card wide-card">
                 <div class="card-title">💹 Balance History (From CSV Records)</div>
                 <div class="chart-container">
-                    <img id="img-balance-history" src="/api/images/balance_history" alt="Balance History" onerror="this.src=''; this.alt='Balance history not available yet. Data will be recorded after trading.'" style="max-width: 100%; height: auto;">
+                    <img id="img-balance-history" src="/api/images/balance_history" alt="Balance History" loading="lazy" onerror="this.src=''; this.alt='Balance history not available yet. Data will be recorded after trading.'" style="max-width: 100%; height: auto;">
                 </div>
             </div>
 
@@ -487,17 +487,17 @@
                 <div id="chartContent">
                     <div class="tab-content active" id="chart-today">
                         <div class="chart-container">
-                            <img id="img-today" src="/api/images/today" alt="Today Chart" onerror="this.src=''; this.alt='Chart not available'">
+                            <img id="img-today" src="/api/images/today" alt="Today Chart" loading="lazy" onerror="this.src=''; this.alt='Chart not available'">
                         </div>
                     </div>
                     <div class="tab-content" id="chart-3days">
                         <div class="chart-container">
-                            <img id="img-3days" src="/api/images/3days" alt="3 Days Chart" onerror="this.src=''; this.alt='Chart not available'">
+                            <img id="img-3days" src="/api/images/3days" alt="3 Days Chart" loading="lazy" onerror="this.src=''; this.alt='Chart not available'">
                         </div>
                     </div>
                     <div class="tab-content" id="chart-5days">
                         <div class="chart-container">
-                            <img id="img-5days" src="/api/images/5days" alt="5 Days Chart" onerror="this.src=''; this.alt='Chart not available'">
+                            <img id="img-5days" src="/api/images/5days" alt="5 Days Chart" loading="lazy" onerror="this.src=''; this.alt='Chart not available'">
                         </div>
                     </div>
                 </div>
@@ -518,25 +518,54 @@
         let autoRefreshInterval = null;
         let assetsChart = null;
         const API_BASE = window.location.origin;
+        const FETCH_TIMEOUT = 10000; // 10초 타임아웃
+
+        // Fetch with timeout wrapper
+        async function fetchWithTimeout(url, options = {}) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+            
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                return response;
+            } catch (error) {
+                clearTimeout(timeoutId);
+                if (error.name === 'AbortError') {
+                    throw new Error('Request timeout');
+                }
+                throw error;
+            }
+        }
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             loadAll();
             startAutoRefresh();
+            // 페이지 로딩 완료 표시
+            window.addEventListener('load', () => {
+                console.log('Page loaded');
+            });
         });
 
         function loadAll() {
-            loadStatus();
-            loadBalance();
-            loadResults();
-            loadTrades();
-            loadAssetsHistory();
-            refreshCharts();
+            Promise.all([
+                loadStatus().catch(err => console.error('loadStatus error:', err)),
+                loadBalance().catch(err => console.error('loadBalance error:', err)),
+                loadResults().catch(err => console.error('loadResults error:', err)),
+                loadTrades().catch(err => console.error('loadTrades error:', err)),
+                loadAssetsHistory().catch(err => console.error('loadAssetsHistory error:', err))
+            ]).finally(() => {
+                refreshCharts();
+            });
         }
 
         async function loadStatus() {
             try {
-                const response = await fetch(`${API_BASE}/api/status`);
+                const response = await fetchWithTimeout(`${API_BASE}/api/status`);
                 const data = await response.json();
 
                 const indicator = document.getElementById('statusIndicator');
@@ -585,7 +614,7 @@
 
         async function loadBalance() {
             try {
-                const response = await fetch(`${API_BASE}/api/balance`);
+                const response = await fetchWithTimeout(`${API_BASE}/api/balance`);
                 const data = await response.json();
                 const content = document.getElementById('balanceContent');
 
@@ -650,7 +679,7 @@
 
         async function loadResults() {
             try {
-                const response = await fetch(`${API_BASE}/api/results`);
+                const response = await fetchWithTimeout(`${API_BASE}/api/results`);
                 const data = await response.json();
                 const content = document.getElementById('resultsContent');
 
@@ -704,7 +733,7 @@
 
         async function loadAssetsHistory() {
             try {
-                const response = await fetch(`${API_BASE}/api/assets_history`);
+                const response = await fetchWithTimeout(`${API_BASE}/api/assets_history`);
                 const data = await response.json();
 
                 if (!data.history || data.history.length === 0) {
@@ -780,7 +809,7 @@
 
         async function loadTrades() {
             try {
-                const response = await fetch(`${API_BASE}/api/trades`);
+                const response = await fetchWithTimeout(`${API_BASE}/api/trades`);
                 const data = await response.json();
                 const content = document.getElementById('tradesContent');
 
@@ -855,7 +884,7 @@
 
         async function controlBacktest(action) {
             try {
-                const response = await fetch(`${API_BASE}/api/control/${action}`, {
+                const response = await fetchWithTimeout(`${API_BASE}/api/control/${action}`, {
                     method: 'POST'
                 });
                 const data = await response.json();
@@ -904,7 +933,7 @@
 
         function startAutoRefresh() {
             stopAutoRefresh(); // Clear any existing interval
-            autoRefreshInterval = setInterval(loadAll, 30000);
+            autoRefreshInterval = setInterval(loadAll, 15000); // 15초마다 새로고침
         }
 
         function stopAutoRefresh() {
@@ -924,7 +953,7 @@
                     return;
                 }
 
-                const response = await fetch(`${API_BASE}/api/initial_capital`, {
+                const response = await fetchWithTimeout(`${API_BASE}/api/initial_capital`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

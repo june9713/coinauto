@@ -284,12 +284,24 @@ class SharedState:
     def get_total_assets_history(self) -> List[Dict[str, Any]]:
         """
         총 자산 변동 이력 조회 (스레드 안전)
+        최대 1일 이내의 데이터만 반환합니다.
 
         Returns:
-        - list: 총 자산 변동 이력 리스트
+        - list: 총 자산 변동 이력 리스트 (최근 1일)
         """
         with self._lock:
-            return self.total_assets_history.copy()
+            # 현재 시간 기준으로 정확히 24시간 전 계산
+            now = datetime.now()
+            one_day_ago = now - pd.Timedelta(days=1)
+            
+            # 최근 1일 이내의 데이터만 필터링
+            filtered_history = []
+            for item in self.total_assets_history:
+                item_time = datetime.fromisoformat(item['timestamp'])
+                if item_time >= one_day_ago:
+                    filtered_history.append(item)
+            
+            return filtered_history
 
     def set_initial_capital(self, initial_capital: float):
         """

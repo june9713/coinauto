@@ -93,7 +93,16 @@ class BalanceVisualizer:
             # 중복 제거 (같은 시간에 여러 거래가 있을 수 있음 - 마지막 것만 유지)
             df = df.drop_duplicates(subset=['execution_time'], keep='last')
 
-            print(f"잔고 이력 로드 완료: {len(df)}개 데이터")
+            # 최대 1일 데이터만 필터링
+            now = pd.Timestamp.now()
+            one_day_ago = now - pd.Timedelta(days=1)
+            df = df[df['execution_time'] >= one_day_ago]
+
+            if len(df) == 0:
+                print("최근 1일 이내의 잔고 정보가 있는 데이터가 없습니다.")
+                return None
+
+            print(f"잔고 이력 로드 완료: {len(df)}개 데이터 (최근 1일)")
             print(f"  기간: {df['execution_time'].iloc[0]} ~ {df['execution_time'].iloc[-1]}")
 
             return df
