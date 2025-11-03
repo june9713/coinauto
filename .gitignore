@@ -35,6 +35,7 @@ Thumbs.db
 *.jpeg
 backtest_result*.jpg
 backtest_result*.png
+trade_state.json
 
 # Jupyter Notebook
 .ipynb_checkpoints
