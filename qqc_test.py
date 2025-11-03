@@ -13,10 +13,10 @@ class QQCTestEngine:
     def __init__(self, initial_capital=None, price_slippage=None,
                  volume_window=None, ma_window=None, volume_multiplier=None,
                  buy_cash_ratio=None, hold_period=None, profit_target=None,
-                 stop_loss=None):
+                 stop_loss=None, initial_holding_state=None):
         """
         초기화
-        
+
         Parameters:
         - initial_capital (float): 초기 자본 (원). None이면 Config 기본값 사용
         - price_slippage (int): 거래 가격 슬리퍼지 (원). None이면 Config 기본값 사용
@@ -27,10 +27,11 @@ class QQCTestEngine:
         - hold_period (int): 매수 후 보유 기간 (캔들 수). None이면 기본값 15 사용
         - profit_target (float): 이익실현 목표 수익률 (%). None이면 기본값 17.6 사용
         - stop_loss (float): 손절 기준 수익률 (%). None이면 기본값 -28.6 사용
+        - initial_holding_state (bool): 초기 코인 보유 상태 (백테스트용). None이면 False 사용
         """
         self.initial_capital = initial_capital or Config.DEFAULT_INITIAL_CAPITAL
         self.price_slippage = price_slippage or Config.DEFAULT_PRICE_SLIPPAGE
-        
+
         # 백테스트 설정
         self.volume_window = volume_window if volume_window is not None else 55
         self.ma_window = ma_window if ma_window is not None else 9
@@ -39,7 +40,10 @@ class QQCTestEngine:
         self.hold_period = hold_period if hold_period is not None else 15
         self.profit_target = profit_target if profit_target is not None else 17.6
         self.stop_loss = stop_loss if stop_loss is not None else -28.6
-        
+
+        # 초기 코인 보유 상태 (백테스트용, 파일에서 복원됨)
+        self.initial_holding_state = initial_holding_state if initial_holding_state is not None else False
+
         # 상태 변수
         self._cash = 0.0
         self._coin_amount = 0.0
@@ -52,24 +56,18 @@ class QQCTestEngine:
         self._buy_condition_date = None  # 조건 확인한 캔들의 날짜 (n 캔들, 보유 기간 계산 기준 - 절대값)
         self._buy_execution_date = None  # 매수 실행한 캔들의 날짜 (n+1 캔들, 절대값)
         self._buy_condition_absolute_index = None  # 조건 확인한 캔들의 절대 인덱스 (n 캔들, df 내 절대 위치)
-        
+
         # 캔들 버퍼 (실시간 처리용)
         # 최신 캔들을 포함하여 최대 volume_window+1개까지 저장 (volume_window개 평균 계산용 + 현재 캔들)
         self._candle_buffer = []
-        
-        # 매수 대기 플래그 (현재 캔들에서 조건 만족 시 다음 캔들의 오픈가로 매수)
-        self._pending_buy = False
-        self._pending_buy_condition_candle_index = None
-        self._pending_buy_absolute_index = None  # 조건 확인한 캔들의 인덱스
-        self._pending_buy_absolute_index = None  # 조건 확인한 캔들의 절대 인덱스
-        
+
         # 디버깅 통계 (run 메서드에서 사용)
         self._condition_check_count = 0
         self._condition_b_satisfied = 0
         self._condition_d_satisfied = 0
         self._condition_e_satisfied = 0
         self._all_conditions_satisfied = 0
-        
+
         # 전체 조건 B, D, E 통계 (보유 여부와 관계없이 모든 캔들에 대해 수집, 그래프와 동일)
         self._condition_b_all_check_count = 0
         self._condition_b_all_satisfied = 0
@@ -85,7 +83,8 @@ class QQCTestEngine:
         self._cash = self.initial_capital
         self._coin_amount = 0.0
         self._total_asset = self.initial_capital
-        self._holding = False
+        # 초기 보유 상태 적용 (파일에서 복원된 상태)
+        self._holding = self.initial_holding_state
         self._buy_price = 0.0
         self._buy_date = None
         self._buy_candle_index = None
@@ -94,9 +93,6 @@ class QQCTestEngine:
         self._buy_execution_date = None
         self._buy_condition_absolute_index = None
         self._candle_buffer = []
-        self._pending_buy = False
-        self._pending_buy_condition_candle_index = None
-        self._pending_buy_absolute_index = None
         self._condition_check_count = 0
         self._condition_b_satisfied = 0
         self._condition_d_satisfied = 0
@@ -164,17 +160,7 @@ class QQCTestEngine:
             
             # 현재 캔들 인덱스 (버퍼 내에서의 위치)
             current_candle_index = len(self._candle_buffer) - 1
-            
-            # 매수 대기 중이면 현재 캔들의 오픈가+1000원으로 매수
-            if self._pending_buy and not self._holding:
-                result = self._execute_buy_at_open(candle, current_candle_index, self._pending_buy_condition_date, self._pending_buy_absolute_index)
-                self._pending_buy = False
-                self._pending_buy_condition_candle_index = None
-                self._pending_buy_condition_date = None
-                self._pending_buy_absolute_index = None
-                if result:
-                    return result
-            
+
             # 보유 여부와 관계없이 모든 캔들에 대해 조건 B, D, E 통계 수집 (디버깅용, 그래프와 동일)
             self._update_all_conditions_statistics(candle, current_candle_index)
             
@@ -300,23 +286,26 @@ class QQCTestEngine:
     
     def _check_buy_conditions(self, candle, current_candle_index):
         """
-        매수 조건 확인
-        
+        매수 조건 확인 및 즉시 매수 실행
+
         Parameters:
         - candle (dict): 현재 캔들 데이터
         - current_candle_index (int): 현재 캔들 인덱스
-        
+
         Returns:
         - dict or None: 매수 시 거래 정보와 자산 기록, 매수하지 않으면 None
         """
         try:
+            # 필수 조건: 코인을 보유하지 않고 있어야 함 (중복 매수 방지)
+            if self._holding:
+                return None
+
             # 최소 volume_window+1개 캔들이 필요 (volume_window개 평균 계산용 + 현재 캔들)
             min_buffer_size = self.volume_window + 1
             if len(self._candle_buffer) < min_buffer_size:
                 return None
-            
-            # 현재 캔들로 조건 확인
-            # 조건 확인은 현재 캔들(i)로 하고, 매수는 다음 캔들(i+1)의 오픈가로 함
+
+            # 현재 캔들로 조건 확인하고, 조건 만족 시 즉시 매수
             if current_candle_index < self.volume_window:
                 return None
             
@@ -355,102 +344,62 @@ class QQCTestEngine:
             if condition_b and condition_d and condition_e:
                 self._all_conditions_satisfied += 1
             
-            # B, D, E 모두 만족하면 다음 캔들의 오픈가+1000원으로 매수
+            # B, D, E 모두 만족하면 현재 캔들의 종가+슬리피지로 즉시 매수
             if condition_b and condition_d and condition_e:
-                # 다음 캔들 추가 시 매수하도록 플래그 설정
-                self._pending_buy = True
-                self._pending_buy_condition_candle_index = current_candle_index  # 조건 확인한 캔들 인덱스 저장 (버퍼 내 상대값)
-                self._pending_buy_condition_date = candle['date']  # 조건 확인한 캔들 날짜 저장 (절대값)
-                self._pending_buy_absolute_index = getattr(self, '_current_absolute_index', None)  # 조건 확인한 캔들의 절대 인덱스
-                # 현재는 거래 없이 자산 평가만 업데이트
-                return None
+                # 즉시 매수 실행 (현재 캔들의 종가 + 슬리피지)
+                buy_price = candle['close'] + self.price_slippage
+
+                # 현금의 buy_cash_ratio만큼 매수
+                available_cash = self._cash * self.buy_cash_ratio
+                self._coin_amount = available_cash / buy_price
+                buy_total = self._coin_amount * buy_price
+
+                # 현금 업데이트
+                self._cash -= buy_total
+                self._holding = True
+                self._buy_price = buy_price
+                self._buy_date = candle['date']
+                self._buy_candle_index = current_candle_index
+                self._buy_condition_candle_index = current_candle_index
+                self._buy_condition_date = candle['date']
+                self._buy_execution_date = candle['date']
+                self._buy_condition_absolute_index = getattr(self, '_current_absolute_index', None)
+
+                # 자산 평가 업데이트
+                coin_value = self._coin_amount * candle['close']
+                self._total_asset = self._cash + coin_value
+
+                trade = {
+                    'date': candle['date'],
+                    'action': 'BUY',
+                    'price': buy_price,
+                    'amount': self._coin_amount,
+                    'total_value': buy_total,
+                    'volume_a': volume_a,
+                    'ma_c': ma_c,
+                    'total_asset': self._total_asset
+                }
+
+                asset_history = {
+                    'date': candle['date'],
+                    'total_asset': self._total_asset,
+                    'cash': self._cash,
+                    'coin_value': coin_value,
+                    'holding': self._holding
+                }
+
+                return {
+                    'trade': trade,
+                    'asset_history': asset_history
+                }
             
             return None
-            
+
         except Exception as e:
             err = traceback.format_exc()
             print("err", err)
             raise
-    
-    def _execute_buy_at_open(self, candle, current_candle_index, condition_date, condition_absolute_index):
-        """
-        매수 실행 (다음 캔들의 오픈가+1000원)
-        
-        Parameters:
-        - candle (dict): 현재 캔들 데이터 (매수 실행할 캔들)
-        - current_candle_index (int): 현재 캔들 인덱스 (버퍼 내 상대값)
-        - condition_date: 조건 확인한 캔들의 날짜 (n 캔들, 절대값)
-        - condition_absolute_index: 조건 확인한 캔들의 절대 인덱스 (n 캔들, df 내 절대 위치)
-        
-        Returns:
-        - dict: 거래 정보와 자산 기록
-        """
-        try:
-            # 다음 오픈가+1000원으로 매수
-            buy_price = candle['open'] + self.price_slippage
-            
-            # 현금의 0.9만큼만 매수
-            available_cash = self._cash * self.buy_cash_ratio
-            self._coin_amount = available_cash / buy_price
-            buy_total = self._coin_amount * buy_price
-            
-            # 현금 업데이트
-            self._cash -= buy_total
-            self._holding = True
-            self._buy_price = buy_price
-            self._buy_date = candle['date']
-            self._buy_candle_index = current_candle_index  # 매수 실행한 캔들 인덱스 (n+1, 버퍼 내 상대값)
-            self._buy_condition_candle_index = self._pending_buy_condition_candle_index  # 조건 확인한 캔들 인덱스 (n, 버퍼 내 상대값)
-            self._buy_condition_date = condition_date  # 조건 확인한 캔들 날짜 (n, 절대값)
-            self._buy_execution_date = candle['date']  # 매수 실행한 캔들 날짜 (n+1, 절대값)
-            self._buy_condition_absolute_index = condition_absolute_index  # 조건 확인한 캔들의 절대 인덱스 (n, df 내 절대 위치)
-            
-            # 자산 평가 업데이트
-            coin_value = self._coin_amount * candle['close']
-            self._total_asset = self._cash + coin_value
-            
-            # 거래량 A와 이동평균 C 계산 (매수 조건을 확인했던 캔들 기준)
-            # 매수 조건은 이전 캔들에서 확인했으므로, 이전 캔들의 인덱스 사용
-            prev_candle_index = current_candle_index - 1
-            if prev_candle_index >= self.volume_window:
-                volume_a = sum([self._candle_buffer[i]['volume'] for i in range(prev_candle_index - self.volume_window, prev_candle_index)]) / self.volume_window
-            else:
-                volume_a = 0.0
-            
-            if prev_candle_index >= self.ma_window:
-                ma_c = sum([self._candle_buffer[i]['close'] for i in range(prev_candle_index - self.ma_window, prev_candle_index)]) / self.ma_window
-            else:
-                ma_c = 0.0
-            
-            trade = {
-                'date': candle['date'],
-                'action': 'BUY',
-                'price': self._buy_price,
-                'amount': self._coin_amount,
-                'total_value': buy_total,
-                'volume_a': volume_a,
-                'ma_c': ma_c,
-                'total_asset': self._total_asset
-            }
-            
-            asset_history = {
-                'date': candle['date'],
-                'total_asset': self._total_asset,
-                'cash': self._cash,
-                'coin_value': coin_value,
-                'holding': self._holding
-            }
-            
-            return {
-                'trade': trade,
-                'asset_history': asset_history
-            }
-            
-        except Exception as e:
-            err = traceback.format_exc()
-            print("err", err)
-            raise
-    
+
     def _check_sell_conditions(self, candle, current_candle_index, current_absolute_index):
         """
         매도 조건 확인
@@ -635,12 +584,7 @@ class QQCTestEngine:
                     trades.append(result['trade'])
 
                 asset_history.append(result['asset_history'])
-            
-            # 마지막 캔들에서 조건을 만족했지만 다음 캔들이 없어서 매수가 실행되지 않은 경우
-            # 주의: 중복 거래 방지를 위해 마지막 캔들의 거래는 메인 루프에서만 처리
-            # 여기서는 플래그만 유지하고 다음 백테스트 실행 시 처리하도록 함
-            last_pending_buy_executed = False
-            
+
             # 최종 수익률 계산
             final_return = ((self._total_asset - self.initial_capital) / self.initial_capital) * 100
             
@@ -661,10 +605,9 @@ class QQCTestEngine:
             print(f"  실제 매수 발생: {len(trades)}회")
             
             # 마지막 거래 상태
-            # 마지막 캔들에서 매수 조건을 만족하여 매수가 실행된 경우, 실제 거래 실행을 위해 'buy'로 설정
             if self._holding:
                 # 마지막 캔들에서 매수가 실행된 경우 'buy', 그 외에는 'hold'
-                if last_pending_buy_executed or (len(trades) > 0 and trades[-1]['action'].startswith('BUY') and len(df) > 0 and trades[-1]['date'] == df.index[-1]):
+                if len(trades) > 0 and trades[-1]['action'].startswith('BUY') and len(df) > 0 and trades[-1]['date'] == df.index[-1]:
                     last_trade_status = 'buy'
                 else:
                     last_trade_status = 'hold'

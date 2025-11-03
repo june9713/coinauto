@@ -395,6 +395,49 @@
             opacity: 0.3;
         }
 
+        /* 모바일 압축 스타일 */
+        .compact-card {
+            padding: 15px;
+        }
+
+        .compact-card .card-title {
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+
+        .compact-card .stat-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            font-size: 0.9em;
+        }
+
+        .compact-card .stat-item {
+            padding: 8px;
+        }
+
+        .compact-card .stat-label {
+            font-size: 0.75em;
+        }
+
+        .compact-card .stat-value {
+            font-size: 1.1em;
+        }
+
+        .compact-chart {
+            max-height: 250px;
+        }
+
+        .compact-tabs {
+            overflow-x: auto;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .compact-tabs .tab {
+            padding: 8px 15px;
+            font-size: 0.9em;
+        }
+
         @media (max-width: 768px) {
             h1 {
                 font-size: 1.8em;
@@ -406,6 +449,67 @@
 
             .controls {
                 flex-direction: column;
+            }
+
+            /* 모바일에서 카드 압축 */
+            .card {
+                padding: 15px;
+            }
+
+            .card-title {
+                font-size: 1.1em;
+                margin-bottom: 10px;
+            }
+
+            .stat-grid {
+                gap: 8px;
+                font-size: 0.9em;
+            }
+
+            .stat-item {
+                padding: 8px;
+            }
+
+            .stat-label {
+                font-size: 0.75em;
+            }
+
+            .stat-value {
+                font-size: 1.1em;
+            }
+
+            /* 차트 이미지 압축 */
+            .chart-container img {
+                max-height: 250px;
+                object-fit: contain;
+            }
+
+            /* 탭 스크롤 가능하게 */
+            .tabs {
+                overflow-x: auto;
+                white-space: nowrap;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .tab {
+                padding: 8px 15px;
+                font-size: 0.9em;
+            }
+
+            /* 캔버스 차트 높이 조정 */
+            #assetsChart {
+                max-height: 200px !important;
+            }
+
+            /* 초기 자산 입력란 압축 */
+            #initialCapitalInput {
+                font-size: 0.9em !important;
+                padding: 8px !important;
+            }
+
+            button {
+                padding: 10px 18px;
+                font-size: 0.9em;
             }
         }
     </style>
@@ -421,6 +525,33 @@
         </header>
 
         <div class="dashboard">
+            <!-- Charts Card (맨 위로 이동) -->
+            <div class="card wide-card">
+                <div class="card-title">📉 Backtest Charts</div>
+                <div class="tabs">
+                    <button class="tab active" onclick="showChart('today')">Today</button>
+                    <button class="tab" onclick="showChart('3days')">3 Days</button>
+                    <button class="tab" onclick="showChart('5days')">5 Days</button>
+                </div>
+                <div id="chartContent">
+                    <div class="tab-content active" id="chart-today">
+                        <div class="chart-container">
+                            <img id="img-today" src="/api/images/today" alt="Today Chart" loading="lazy" onerror="this.src=''; this.alt='Chart not available'">
+                        </div>
+                    </div>
+                    <div class="tab-content" id="chart-3days">
+                        <div class="chart-container">
+                            <img id="img-3days" src="/api/images/3days" alt="3 Days Chart" loading="lazy" onerror="this.src=''; this.alt='Chart not available'">
+                        </div>
+                    </div>
+                    <div class="tab-content" id="chart-5days">
+                        <div class="chart-container">
+                            <img id="img-5days" src="/api/images/5days" alt="5 Days Chart" loading="lazy" onerror="this.src=''; this.alt='Chart not available'">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Status Card -->
             <div class="card">
                 <div class="card-title">
@@ -473,33 +604,6 @@
                 <div class="card-title">💹 Balance History (From CSV Records)</div>
                 <div class="chart-container">
                     <img id="img-balance-history" src="/api/images/balance_history" alt="Balance History" loading="lazy" onerror="this.src=''; this.alt='Balance history not available yet. Data will be recorded after trading.'" style="max-width: 100%; height: auto;">
-                </div>
-            </div>
-
-            <!-- Charts Card -->
-            <div class="card wide-card">
-                <div class="card-title">📉 Backtest Charts</div>
-                <div class="tabs">
-                    <button class="tab active" onclick="showChart('today')">Today</button>
-                    <button class="tab" onclick="showChart('3days')">3 Days</button>
-                    <button class="tab" onclick="showChart('5days')">5 Days</button>
-                </div>
-                <div id="chartContent">
-                    <div class="tab-content active" id="chart-today">
-                        <div class="chart-container">
-                            <img id="img-today" src="/api/images/today" alt="Today Chart" loading="lazy" onerror="this.src=''; this.alt='Chart not available'">
-                        </div>
-                    </div>
-                    <div class="tab-content" id="chart-3days">
-                        <div class="chart-container">
-                            <img id="img-3days" src="/api/images/3days" alt="3 Days Chart" loading="lazy" onerror="this.src=''; this.alt='Chart not available'">
-                        </div>
-                    </div>
-                    <div class="tab-content" id="chart-5days">
-                        <div class="chart-container">
-                            <img id="img-5days" src="/api/images/5days" alt="5 Days Chart" loading="lazy" onerror="this.src=''; this.alt='Chart not available'">
-                        </div>
-                    </div>
                 </div>
             </div>
 

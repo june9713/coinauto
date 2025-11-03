@@ -146,29 +146,32 @@ class Visualizer:
             
             # QQC 전략 파라미터 확인
             has_qqc_params = volume_window is not None and ma_window is not None and volume_multiplier is not None
-            
+
             # 서브플롯 개수 결정
             subplot_count = 3  # 기본: 가격, 보유 구간, 누적 수익률
             if has_angle_data:
                 subplot_count += 1  # 각도 차트 추가
             if has_qqc_params:
-                subplot_count += 1  # 거래량 차트만 추가
-            
+                subplot_count += 2  # 거래량 차트 + 조건 상태 차트 추가
+
             # 서브플롯 인덱스 설정
             current_idx = 0
             price_ax_idx = current_idx
             current_idx += 1
-            
+
             angle_ax_idx = None
             if has_angle_data:
                 angle_ax_idx = current_idx
                 current_idx += 1
-            
+
             volume_ax_idx = None
+            conditions_ax_idx = None
             if has_qqc_params:
                 volume_ax_idx = current_idx
                 current_idx += 1
-            
+                conditions_ax_idx = current_idx
+                current_idx += 1
+
             holding_ax_idx = current_idx
             current_idx += 1
             profit_ax_idx = current_idx
@@ -178,7 +181,7 @@ class Visualizer:
             if subplot_count == 1:
                 axes = [axes]
             
-            fig.suptitle('BTC 백테스트 결과', fontsize=16, fontweight='bold')
+            #fig.suptitle('BTC 백테스트 결과', fontsize=16, fontweight='bold')
             
             dates = df.index
             close_prices = df['close'].values
@@ -197,7 +200,11 @@ class Visualizer:
             # 3. 거래량 차트 (QQC 파라미터가 있는 경우)
             if has_qqc_params and volume_ax_idx is not None:
                 self._plot_volume_chart(axes[volume_ax_idx], df, volume_window, volume_multiplier)
-            
+
+            # 3-1. 조건 상태 차트 (QQC 파라미터가 있는 경우)
+            if has_qqc_params and conditions_ax_idx is not None:
+                self._plot_conditions_states_chart(axes[conditions_ax_idx], df, volume_window, ma_window, volume_multiplier)
+
             # 4. 보유 구간 표시
             self._plot_holding_periods(axes[holding_ax_idx], dates, close_prices, trades)
             
@@ -340,7 +347,7 @@ class Visualizer:
             
             ax.set_ylabel('가격 (원)', fontsize=10)
             ax.set_title('BTC 가격 및 매매 신호', fontsize=12, fontweight='bold')
-            ax.legend(loc='best')
+            ax.legend(loc='lower left')
             ax.grid(True, alpha=0.3)
             ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
             
@@ -477,7 +484,7 @@ class Visualizer:
             
             ax.set_ylabel('가격 (원)', fontsize=10)
             ax.set_title('BTC 가격 (종가, 이동평균, 음봉/양봉)', fontsize=12, fontweight='bold')
-            ax.legend(loc='best')
+            ax.legend(loc='lower left')
             ax.grid(True, alpha=0.3)
             ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
             
@@ -535,7 +542,7 @@ class Visualizer:
             
             ax.set_ylabel('거래량 (BTC)', fontsize=10)
             ax.set_title('거래량 비교 (조건 B)', fontsize=12, fontweight='bold')
-            ax.legend(loc='best')
+            ax.legend(loc='lower left')
             ax.grid(True, alpha=0.3)
             # 로그 스케일 사용 시 수식 렌더링 문제 방지를 위해 커스텀 포맷터 사용
             ax.set_yscale('log')  # 거래량은 로그 스케일이 적합할 수 있음
@@ -629,7 +636,7 @@ class Visualizer:
             
             ax.set_ylabel('가격 (원)', fontsize=10)
             ax.set_title('조건 B 만족 구간 (거래량 >= 평균 * 배수)', fontsize=12, fontweight='bold')
-            ax.legend(loc='best')
+            ax.legend(loc='lower left')
             ax.grid(True, alpha=0.3)
             ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
             
@@ -706,7 +713,7 @@ class Visualizer:
             
             ax.set_ylabel('가격 (원)', fontsize=10)
             ax.set_title('조건 D 만족 구간 (종가 > 이동평균)', fontsize=12, fontweight='bold')
-            ax.legend(loc='best')
+            ax.legend(loc='lower left')
             ax.grid(True, alpha=0.3)
             ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
             
@@ -795,7 +802,7 @@ class Visualizer:
             
             ax.set_ylabel('가격 (원)', fontsize=10)
             ax.set_title('조건 E 만족 구간 (양봉: 오픈가 < 종가)', fontsize=12, fontweight='bold')
-            ax.legend(loc='best')
+            ax.legend(loc='lower left')
             ax.grid(True, alpha=0.3)
             ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
             
@@ -807,7 +814,7 @@ class Visualizer:
     def _plot_bde_conditions_chart(self, ax, df, volume_window, ma_window, volume_multiplier):
         """
         B, D, E 조건 모두 일치하는 구간을 색깔로 표시하는 그래프
-        
+
         Parameters:
         - ax: matplotlib axes 객체
         - df: OHLCV 데이터프레임
@@ -820,7 +827,7 @@ class Visualizer:
             close_prices = df['close'].values
             open_prices = df['open'].values
             volumes = df['volume'].values
-            
+
             # 조건 계산 (벡터화하여 속도 향상)
             # 조건 B: 현재 거래량 >= 거래량 평균 * volume_multiplier
             # CSV에 저장된 거래량 평균 사용, 없으면 계산
@@ -832,7 +839,7 @@ class Visualizer:
                 if len(volume_avg) > 0:
                     volume_avg[0] = 0.0
             condition_b = volumes >= (volume_avg * volume_multiplier)
-            
+
             # 조건 D: 현재 종가 > 이동평균
             # CSV에 저장된 이동평균 사용, 없으면 계산
             if 'ma_values' in df.columns:
@@ -843,23 +850,23 @@ class Visualizer:
                 if len(ma_values) > 0:
                     ma_values[0] = close_prices[0]
             condition_d = close_prices > ma_values
-            
+
             # 조건 E: 양봉 (오픈가 < 종가)
             condition_e = open_prices < close_prices
-            
+
             # B, D, E 모두 만족하는 구간
             condition_all = condition_b & condition_d & condition_e
-            
+
             # 종가 그래프
             ax.plot(dates, close_prices, label='BTC 종가', color='gray', linewidth=1.5, alpha=0.5)
-            
+
             # B, D, E 모두 만족하는 구간 색칠
             if np.any(condition_all):
                 # 연속된 구간 찾기
                 in_range = False
                 start_idx = None
                 label_added = False
-                
+
                 for i, satisfied in enumerate(condition_all):
                     if satisfied and not in_range:
                         # 구간 시작
@@ -869,18 +876,18 @@ class Visualizer:
                         # 구간 종료
                         if start_idx is not None:
                             label = 'B, D, E 모두 만족' if not label_added else None
-                            ax.axvspan(dates[start_idx], dates[i-1], alpha=0.3, 
+                            ax.axvspan(dates[start_idx], dates[i-1], alpha=0.3,
                                      color='yellow', label=label)
                             label_added = True
                         in_range = False
                         start_idx = None
-                
+
                 # 마지막까지 만족하는 경우
                 if in_range and start_idx is not None:
                     label = 'B, D, E 모두 만족' if not label_added else None
-                    ax.axvspan(dates[start_idx], dates[-1], alpha=0.3, 
+                    ax.axvspan(dates[start_idx], dates[-1], alpha=0.3,
                              color='yellow', label=label)
-            
+
             # 매수 신호 표시 (B, D, E 만족 시점)
             buy_signals_dates = []
             buy_signals_prices = []
@@ -888,17 +895,95 @@ class Visualizer:
                 if satisfied:
                     buy_signals_dates.append(date)
                     buy_signals_prices.append(close_prices[i])
-            
+
             if buy_signals_dates:
-                ax.scatter(buy_signals_dates, buy_signals_prices, color='green', marker='o', 
+                ax.scatter(buy_signals_dates, buy_signals_prices, color='green', marker='o',
                           s=50, alpha=0.6, label='BDE 조건 만족', zorder=4)
-            
+
             ax.set_ylabel('가격 (원)', fontsize=10)
             ax.set_title('B, D, E 조건 모두 일치하는 구간', fontsize=12, fontweight='bold')
-            ax.legend(loc='best')
+            ax.legend(loc='lower left')
             ax.grid(True, alpha=0.3)
             ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
-            
+
+        except Exception as e:
+            err = traceback.format_exc()
+            print("err", err)
+            raise
+
+    def _plot_conditions_states_chart(self, ax, df, volume_window, ma_window, volume_multiplier):
+        """
+        조건 B, D, E 및 B&&D&&E의 True/False 상태를 시간대별로 표시하는 그래프
+
+        Parameters:
+        - ax: matplotlib axes 객체
+        - df: OHLCV 데이터프레임
+        - volume_window: 거래량 평균 계산용 윈도우
+        - ma_window: 이동평균 계산용 윈도우
+        - volume_multiplier: 거래량 배수
+        """
+        try:
+            dates = df.index
+            close_prices = df['close'].values
+            open_prices = df['open'].values
+            volumes = df['volume'].values
+
+            # 조건 계산 (벡터화하여 속도 향상)
+            # 조건 B: 현재 거래량 >= 거래량 평균 * volume_multiplier
+            if 'volume_avg' in df.columns:
+                volume_avg = df['volume_avg'].values
+            else:
+                volume_avg = df['volume'].shift(1).rolling(window=volume_window, min_periods=1).mean().values
+                if len(volume_avg) > 0:
+                    volume_avg[0] = 0.0
+            condition_b = volumes >= (volume_avg * volume_multiplier)
+
+            # 조건 D: 현재 종가 > 이동평균
+            if 'ma_values' in df.columns:
+                ma_values = df['ma_values'].values
+            else:
+                ma_values = df['close'].shift(1).rolling(window=ma_window, min_periods=1).mean().values
+                if len(ma_values) > 0:
+                    ma_values[0] = close_prices[0]
+            condition_d = close_prices > ma_values
+
+            # 조건 E: 양봉 (오픈가 < 종가)
+            condition_e = open_prices < close_prices
+
+            # B&&D&&E (모든 조건 만족)
+            condition_all = condition_b & condition_d & condition_e
+
+            # True를 1, False를 0으로 변환
+            b_values = condition_b.astype(int)
+            d_values = condition_d.astype(int)
+            e_values = condition_e.astype(int)
+            all_values = condition_all.astype(int)
+
+            # 각 조건을 서로 다른 높이에 표시 (계단식으로 배치하여 보기 쉽게)
+            # 4개의 레이어로 구성: B(맨 아래), D(두번째), E(세번째), B&&D&&E(맨 위)
+            ax.fill_between(dates, 0, b_values, where=b_values > 0,
+                           alpha=0.5, color='green', label='조건 B', step='post')
+            ax.fill_between(dates, 1, 1 + d_values, where=d_values > 0,
+                           alpha=0.5, color='blue', label='조건 D', step='post')
+            ax.fill_between(dates, 2, 2 + e_values, where=e_values > 0,
+                           alpha=0.5, color='red', label='조건 E', step='post')
+            ax.fill_between(dates, 3, 3 + all_values, where=all_values > 0,
+                           alpha=0.7, color='purple', label='B&&D&&E', step='post')
+
+            # y축 설정
+            ax.set_ylim(-0.2, 4.5)
+            ax.set_yticks([0.5, 1.5, 2.5, 3.5])
+            ax.set_yticklabels(['조건 B', '조건 D', '조건 E', 'B&&D&&E'])
+
+            # 그리드 추가 (각 조건 구분선)
+            for y in [1, 2, 3]:
+                ax.axhline(y=y, color='gray', linestyle='--', alpha=0.3, linewidth=0.5)
+
+            ax.set_ylabel('조건 상태', fontsize=10)
+            ax.set_title('조건 B, D, E 및 B&&D&&E 상태', fontsize=12, fontweight='bold')
+            ax.legend(loc='lower left')
+            ax.grid(True, alpha=0.2, axis='x')
+
         except Exception as e:
             err = traceback.format_exc()
             print("err", err)
@@ -929,7 +1014,7 @@ class Visualizer:
             
             ax.set_ylabel('각도 (°)', fontsize=10)
             ax.set_title('추세선 각도', fontsize=12, fontweight='bold')
-            ax.legend(loc='best')
+            ax.legend(loc='lower left')
             ax.grid(True, alpha=0.3)
             
         except Exception as e:
@@ -1058,7 +1143,7 @@ class Visualizer:
             # legend는 라벨이 있는 아티스트가 있을 때만 표시
             handles, labels = ax.get_legend_handles_labels()
             if handles:
-                ax.legend(loc='best')
+                ax.legend(loc='lower left')
             ax.grid(True, alpha=0.3)
             ax.yaxis.set_major_formatter(plt.FuncFormatter(safe_number_formatter))
             

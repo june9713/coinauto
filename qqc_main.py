@@ -31,10 +31,10 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
          price_slippage=None, ticker='BTC', interval='24h',
          volume_window=None, ma_window=None, volume_multiplier=None,
          buy_cash_ratio=None, hold_period=None, profit_target=None,
-         stop_loss=None):
+         stop_loss=None, saved_state=None):
     """
     QQC 백테스트 메인 함수
-    
+
     Parameters:
     - start_date (str): 백테스트 시작 날짜 (YYYY-MM-DD 형식). 기본값 '2014-01-01'
     - end_date (str, optional): 백테스트 종료 날짜 (YYYY-MM-DD 형식). None이면 모든 데이터 사용
@@ -49,6 +49,7 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
     - hold_period (int, optional): 매수 후 보유 기간 (캔들 수). None이면 기본값 15 사용
     - profit_target (float, optional): 이익실현 목표 수익률 (%). None이면 기본값 17.6 사용
     - stop_loss (float, optional): 손절 기준 수익률 (%). None이면 기본값 -28.6 사용
+    - saved_state (dict, optional): 저장된 거래 상태. None이면 새로운 상태로 시작
     """
     try:
         print("="*80)
@@ -266,11 +267,19 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
                     print(f"    - 과거 평균용: {volume_window_val}개")
                     print(f"    - 현재 캔들: 1개")
         
+        # 저장된 상태에서 코인 보유 상태 확인
+        initial_holding_state = False
+        if saved_state is not None:
+            initial_holding_state = saved_state.get('holding_state', False)
+            print(f"\n[저장된 상태 복원]")
+            print(f"  코인 보유 상태: {'보유 중' if initial_holding_state else '미보유'}")
+
         # QQC 백테스트 실행
         print("\n[단계 2] QQC 백테스트 실행 중...")
         print(f"초기 자본: {initial_cap_val:,.0f}원")
         print(f"거래 가격 슬리퍼지: {price_slip_val:,.0f}원")
         print("매수 조건:")
+        print(f"  - 코인 보유 == False (중복 매수 방지)")
         print(f"  - 조건 B: 현재 거래량 >= 거래량 A ({volume_window_val}개 평균) * {volume_multiplier_val}")
         print(f"  - 조건 D: 현재 종가 > 이동평균 C ({ma_window_val}개 평균)")
         print("  - 조건 E: 양봉 (오픈가 < 종가)")
@@ -280,7 +289,7 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         print(f"  - 수익률 >= {profit_target_val}%: 이익실현")
         print(f"  - 수익률 <= {stop_loss_val}%: 손절")
         print(f"  - 매수 후 {hold_period_val} 캔들 경과: 무조건 매도 (n+{hold_period_val} 캔들의 오픈가)")
-        
+
         qqc_engine = QQCTestEngine(
             initial_capital=initial_cap_val,
             price_slippage=price_slip_val,
@@ -290,7 +299,8 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
             buy_cash_ratio=buy_cash_ratio_val,
             hold_period=hold_period_val,
             profit_target=profit_target_val,
-            stop_loss=stop_loss_val
+            stop_loss=stop_loss_val,
+            initial_holding_state=initial_holding_state
         )
         
         # 백테스트 실행
@@ -518,13 +528,17 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         )
         
         print("\nQQC 백테스트 완료!")
-        
+
+        # 백테스트 결과에서 최종 보유 상태 확인
+        final_holding_state = result.get('last_trade_status', 'unknown') in ['buy', 'hold']
+
         # 마지막 거래 상태와 결과 반환 (실제 거래 실행을 위해)
         return {
             'last_trade_status': result.get('last_trade_status', 'unknown'),
             'result': result,
             'trades': result.get('trades', []),
-            'final_asset': result.get('final_asset', initial_cap_val)
+            'final_asset': result.get('final_asset', initial_cap_val),
+            'final_holding_state': final_holding_state  # 백테스트 종료 시점의 코인 보유 상태
         }
         
     except Exception as e:
@@ -832,13 +846,16 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
                     buy_cash_ratio=buy_cash_ratio_val,
                     hold_period=hold_period_val,
                     profit_target=profit_target_val,
-                    stop_loss=stop_loss_val
+                    stop_loss=stop_loss_val,
+                    saved_state=saved_state
                 )
                 
                 # 백테스트 결과 처리
                 if isinstance(testresult, dict):
                     backtest_status = testresult.get('last_trade_status', 'unknown')
+                    final_holding_state = testresult.get('final_holding_state', False)
                     print(f"\n백테스트 결과 상태: {backtest_status}")
+                    print(f"최종 코인 보유 상태: {'보유 중' if final_holding_state else '미보유'}")
 
                     # 상태 업데이트 및 실제 거래 실행
                     if saved_state is not None and trader is not None:
@@ -856,6 +873,7 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
 
                         # 상태 업데이트
                         saved_state['last_backtest_status'] = backtest_status
+                        saved_state['holding_state'] = final_holding_state  # 백테스트 결과로 보유 상태 업데이트
                         saved_state['last_update'] = pd.Timestamp.now()
 
                         # 실제 잔고 재조회 및 업데이트
@@ -863,6 +881,8 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
                             balance = trader.get_balance(ticker)
                             saved_state['actual_cash'] = balance['cash']
                             saved_state['actual_coin_amount'] = balance['coin']
+                            # 실제 코인 보유량을 기반으로 holding_state 업데이트 (실제 거래 반영)
+                            saved_state['holding_state'] = balance['coin'] > 0
 
                             # 현재 BTC 가격 조회 (최근 백테스트 결과에서)
                             btc_price = 0
@@ -1052,18 +1072,21 @@ if __name__ == "__main__":
             buy_cash_ratio=buy_cash_ratio,
             hold_period=hold_period,
             profit_target=profit_target,
-            stop_loss=stop_loss
+            stop_loss=stop_loss,
+            saved_state=saved_state
         )
-        
+
         # 백테스트 결과 처리
         if isinstance(testresult, dict):
             backtest_status = testresult.get('last_trade_status', 'unknown')
+            final_holding_state = testresult.get('final_holding_state', False)
             print(f"\n백테스트 결과 상태: {backtest_status}")
-            
+            print(f"최종 코인 보유 상태: {'보유 중' if final_holding_state else '미보유'}")
+
             # 상태 업데이트 및 실제 거래 실행
             if saved_state is not None and trader is not None:
                 prev_status = saved_state.get('last_backtest_status', 'none')
-                
+
                 # 실제 거래 실행
                 trade_executed = execute_real_trade(
                     trader=trader,
@@ -1073,9 +1096,10 @@ if __name__ == "__main__":
                     state=saved_state,
                     buy_cash_ratio=buy_cash_ratio
                 )
-                
+
                 # 상태 업데이트
                 saved_state['last_backtest_status'] = backtest_status
+                saved_state['holding_state'] = final_holding_state  # 백테스트 결과로 보유 상태 업데이트
                 saved_state['last_update'] = pd.Timestamp.now()
                 
                 # 실제 잔고 재조회 및 업데이트
@@ -1083,6 +1107,8 @@ if __name__ == "__main__":
                     balance = trader.get_balance(ticker)
                     saved_state['actual_cash'] = balance['cash']
                     saved_state['actual_coin_amount'] = balance['coin']
+                    # 실제 코인 보유량을 기반으로 holding_state 업데이트 (실제 거래 반영)
+                    saved_state['holding_state'] = balance['coin'] > 0
 
                     # 현재 BTC 가격 조회 (최근 백테스트 결과에서)
                     btc_price = 0

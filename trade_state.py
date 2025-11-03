@@ -98,23 +98,27 @@ class TradeStateManager:
     def create_initial_state(cls, initial_capital, actual_cash, actual_coin_amount, ticker):
         """
         초기 상태 생성
-        
+
         Parameters:
         - initial_capital (float): 초기 자본 (백테스트용)
         - actual_cash (float): 실제 계좌 현금 잔고
         - actual_coin_amount (float): 실제 계좌 코인 보유량
         - ticker (str): 암호화폐 티커
-        
+
         Returns:
         - dict: 초기 상태 딕셔너리
         """
         try:
+            # actual_coin_amount가 0보다 크면 코인 보유 중, 아니면 미보유
+            holding_state = actual_coin_amount > 0
+
             state = {
                 'initialized': True,
                 'initial_capital': initial_capital,
                 'actual_cash': actual_cash,
                 'actual_coin_amount': actual_coin_amount,
                 'ticker': ticker,
+                'holding_state': holding_state,  # 코인 보유 상태 (백테스트용, True=보유 중, False=미보유)
                 'last_backtest_status': 'none',  # 'buy', 'sell', 'hold', 'none', 'wait'
                 'last_update': pd.Timestamp.now(),
                 'sync_needed': False  # 실제 자산과 백테스트 자산 동기화 필요 여부

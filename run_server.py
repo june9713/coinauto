@@ -422,6 +422,13 @@ async def set_initial_capital(request: dict):
 
 
 if __name__ == "__main__":
+    # PID를 파일에 기록
+    pid = os.getpid()
+    pid_file = os.path.join(os.getcwd(), 'pid.txt')
+    with open(pid_file, 'w') as f:
+        f.write(str(pid))
+    print(f"PID {pid}를 {pid_file}에 기록했습니다.")
+
     # 서버 실행
     port = int(os.getenv("PORT", "8000"))
     host = os.getenv("HOST", "0.0.0.0")
