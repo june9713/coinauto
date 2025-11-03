@@ -5,6 +5,7 @@
   "actual_coin_amount": 0.0,
   "ticker": "BTC",
   "last_backtest_status": "none",
-  "last_update": "2025-11-03T09:21:22.234833",
-  "sync_needed": false
+  "last_update": "2025-11-03T09:36:21.211594",
+  "sync_needed": false,
+  "holding_state": false
 }
