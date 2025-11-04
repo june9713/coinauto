@@ -104,7 +104,8 @@ class Visualizer:
     
     def plot_backtest_results(self, df, result, save_path=None,
                              buy_threshold=None, sell_threshold=None,
-                             volume_window=None, ma_window=None, volume_multiplier=None):
+                             volume_window=None, ma_window=None, volume_multiplier=None,
+                             hold_period=None, interval=None):
         """
         백테스트 결과를 matplotlib으로 시각화
 
@@ -188,7 +189,7 @@ class Visualizer:
             
             # 1. BTC 가격 차트 (종가, 이동평균, 음봉/양봉)
             if has_qqc_params:
-                self._plot_price_chart_with_qqc(axes[price_ax_idx], df, trades, ma_window)
+                self._plot_price_chart_with_qqc(axes[price_ax_idx], df, trades, ma_window, result, hold_period, interval)
             else:
                 self._plot_price_chart(axes[price_ax_idx], dates, close_prices, trades)
             
@@ -356,15 +357,18 @@ class Visualizer:
             print("err", err)
             raise
     
-    def _plot_price_chart_with_qqc(self, ax, df, trades, ma_window):
+    def _plot_price_chart_with_qqc(self, ax, df, trades, ma_window, result=None, hold_period=None, interval=None):
         """
         QQC 전략용 가격 차트 플롯 (종가, 이동평균, 음봉/양봉)
-        
+
         Parameters:
         - ax: matplotlib axes 객체
         - df: OHLCV 데이터프레임
         - trades: 거래 리스트
         - ma_window: 이동평균 윈도우
+        - result: 백테스트 결과 딕셔너리
+        - hold_period: 보유 기간 (캔들 수)
+        - interval: 캔들 간격 (예: '3m', '5m')
         """
         try:
             dates = df.index
@@ -479,9 +483,65 @@ class Visualizer:
                 ax.scatter(sell_loss_dates, sell_loss_prices, color='orange', marker='v', s=100, 
                           label='매도 (손절)', zorder=5)
             if sell_expiry_dates:
-                ax.scatter(sell_expiry_dates, sell_expiry_prices, color='purple', marker='v', s=100, 
+                ax.scatter(sell_expiry_dates, sell_expiry_prices, color='purple', marker='v', s=100,
                           label='매도 (기간 만료)', zorder=5)
-            
+
+            # 카운트다운 표시 (보유 중일 때만)
+            if hold_period is not None and interval is not None and result is not None:
+                from trade_state import TradeStateManager
+                try:
+                    # trade_state에서 현재 보유 상태 확인
+                    state = TradeStateManager.load_state()
+                    if state and state.get('holding_state', False) and state.get('buy_condition_date'):
+                        buy_condition_date = pd.to_datetime(state['buy_condition_date'])
+
+                        # 현재 시간
+                        now = pd.Timestamp.now()
+
+                        # interval을 분 단위로 변환
+                        if interval.endswith('m'):
+                            interval_minutes = int(interval[:-1])
+                        elif interval.endswith('h'):
+                            interval_minutes = int(interval[:-1]) * 60
+                        elif interval.endswith('d'):
+                            interval_minutes = int(interval[:-1]) * 60 * 24
+                        else:
+                            interval_minutes = 3  # 기본값
+
+                        # 경과 시간 및 캔들 수 계산
+                        time_diff = now - buy_condition_date
+                        candles_passed = int(time_diff.total_seconds() / 60 / interval_minutes)
+                        candles_remaining = hold_period - candles_passed
+
+                        # 남은 시간 계산
+                        minutes_remaining = candles_remaining * interval_minutes
+                        hours_remaining = minutes_remaining // 60
+                        mins_remaining = minutes_remaining % 60
+
+                        # 카운트다운 텍스트 생성
+                        if candles_remaining > 0:
+                            countdown_text = f'강제 매도까지: {candles_remaining}캔들 ({hours_remaining}시간 {mins_remaining}분)'
+                            text_color = 'red'
+                        elif candles_remaining == 0:
+                            countdown_text = '강제 매도: 곧 실행 예정'
+                            text_color = 'darkred'
+                        else:
+                            countdown_text = f'강제 매도: {abs(candles_remaining)}캔들 초과 (확인 필요)'
+                            text_color = 'darkred'
+
+                        # 그래프 상단 중앙에 카운트다운 표시
+                        ax.text(0.5, 0.95, countdown_text,
+                               transform=ax.transAxes,
+                               fontsize=14, fontweight='bold',
+                               color=text_color,
+                               ha='center', va='top',
+                               bbox=dict(boxstyle='round,pad=0.5', facecolor='yellow', alpha=0.8, edgecolor=text_color, linewidth=2))
+
+                        print(f"  [카운트다운] {countdown_text} (매수시점: {buy_condition_date}, 경과: {candles_passed}/{hold_period})")
+                except Exception as e:
+                    # 카운트다운 표시 실패는 무시 (필수 기능이 아니므로)
+                    print(f"  경고: 카운트다운 표시 실패: {str(e)}")
+
             ax.set_ylabel('가격 (원)', fontsize=10)
             ax.set_title('BTC 가격 (종가, 이동평균, 음봉/양봉)', fontsize=12, fontweight='bold')
             ax.legend(loc='lower left')
@@ -1202,7 +1262,7 @@ class Visualizer:
     def plot_backtest_results_by_periods(self, df, result, base_dir='./images',
                                          buy_threshold=None, sell_threshold=None,
                                          volume_window=None, ma_window=None, volume_multiplier=None,
-                                         interval=None):
+                                         interval=None, hold_period=None):
         """
         여러 기간별 백테스트 결과 그래프 생성 (순차 처리)
 
@@ -1296,7 +1356,8 @@ class Visualizer:
                     self.plot_backtest_results(
                         period_df, period_result, save_path=save_path,
                         buy_threshold=buy_threshold, sell_threshold=sell_threshold,
-                        volume_window=volume_window, ma_window=ma_window, volume_multiplier=volume_multiplier
+                        volume_window=volume_window, ma_window=ma_window, volume_multiplier=volume_multiplier,
+                        hold_period=hold_period, interval=interval
                     )
                     print(f"  ✓ {period_name} 그래프 생성 완료: {save_path}")
                 except Exception as e:

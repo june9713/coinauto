@@ -1322,7 +1322,16 @@ class DataManager:
 
             # execution_time을 datetime으로 변환
             if 'execution_time' in df.columns:
-                df['execution_time'] = pd.to_datetime(df['execution_time'])
+                try:
+                    df['execution_time'] = pd.to_datetime(df['execution_time'], errors='coerce')
+                    # NaT (Not a Time) 값이 있으면 제거
+                    if df['execution_time'].isna().any():
+                        print(f"경고: execution_time에 {df['execution_time'].isna().sum()}개의 잘못된 날짜 형식이 있어 제거합니다.")
+                        df = df.dropna(subset=['execution_time'])
+                except Exception as e:
+                    print(f"경고: execution_time 변환 실패: {e}")
+                    # 변환 실패 시 현재 시간으로 설정
+                    df['execution_time'] = datetime.now()
 
             # 중복 제거 (execution_time, trade_date, action 기준)
             if 'execution_time' in df.columns and 'trade_date' in df.columns and 'action' in df.columns:
@@ -1333,7 +1342,8 @@ class DataManager:
                 df = df.drop_duplicates(subset=['trade_date'], keep='last')
 
             # 최신순으로 정렬
-            df = df.sort_values('execution_time', ascending=False)
+            if 'execution_time' in df.columns and len(df) > 0:
+                df = df.sort_values('execution_time', ascending=False)
 
             print(f"백테스트 결과 로드 완료 (시간별 분할 파일 병합): {len(df)}개 기록")
             print(f"  로드된 파일 수: {len(all_dataframes)}개")

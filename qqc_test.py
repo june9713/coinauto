@@ -13,7 +13,9 @@ class QQCTestEngine:
     def __init__(self, initial_capital=None, price_slippage=None,
                  volume_window=None, ma_window=None, volume_multiplier=None,
                  buy_cash_ratio=None, hold_period=None, profit_target=None,
-                 stop_loss=None, initial_holding_state=None):
+                 stop_loss=None, initial_holding_state=None,
+                 saved_buy_price=None, saved_buy_condition_date=None,
+                 saved_buy_execution_date=None, interval=None):
         """
         초기화
 
@@ -28,6 +30,10 @@ class QQCTestEngine:
         - profit_target (float): 이익실현 목표 수익률 (%). None이면 기본값 17.6 사용
         - stop_loss (float): 손절 기준 수익률 (%). None이면 기본값 -28.6 사용
         - initial_holding_state (bool): 초기 코인 보유 상태 (백테스트용). None이면 False 사용
+        - saved_buy_price (float): 저장된 매수 가격. None이면 없음
+        - saved_buy_condition_date (datetime): 저장된 매수 조건 확인 날짜. None이면 없음
+        - saved_buy_execution_date (datetime): 저장된 매수 실행 날짜. None이면 없음
+        - interval (str): 캔들스틱 간격 (예: '3m', '5m', '1h'). None이면 기본값 '3m' 사용
         """
         self.initial_capital = initial_capital or Config.DEFAULT_INITIAL_CAPITAL
         self.price_slippage = price_slippage or Config.DEFAULT_PRICE_SLIPPAGE
@@ -41,8 +47,17 @@ class QQCTestEngine:
         self.profit_target = profit_target if profit_target is not None else 17.6
         self.stop_loss = stop_loss if stop_loss is not None else -28.6
 
+        # interval 설정 및 분 단위 변환
+        self.interval = interval if interval is not None else '3m'
+        self._interval_minutes = self._parse_interval_to_minutes(self.interval)
+
         # 초기 코인 보유 상태 (백테스트용, 파일에서 복원됨)
         self.initial_holding_state = initial_holding_state if initial_holding_state is not None else False
+
+        # 저장된 매수 시점 정보 (15캔들 경과 후 매도를 위해 필요)
+        self.saved_buy_price = saved_buy_price
+        self.saved_buy_condition_date = saved_buy_condition_date
+        self.saved_buy_execution_date = saved_buy_execution_date
 
         # 상태 변수
         self._cash = 0.0
@@ -77,7 +92,31 @@ class QQCTestEngine:
         self._condition_d_all_satisfied = 0
         self._condition_e_all_satisfied = 0
         self._condition_bde_all_satisfied = 0
-        
+
+    def _parse_interval_to_minutes(self, interval):
+        """
+        interval 문자열을 분 단위로 변환
+
+        Parameters:
+        - interval (str): 간격 문자열 (예: '3m', '5m', '1h', '1d')
+
+        Returns:
+        - int: 분 단위 간격
+        """
+        try:
+            if interval.endswith('m'):
+                return int(interval[:-1])
+            elif interval.endswith('h'):
+                return int(interval[:-1]) * 60
+            elif interval.endswith('d'):
+                return int(interval[:-1]) * 60 * 24
+            else:
+                print(f"[경고] 알 수 없는 interval 형식: {interval}, 기본값 3분 사용")
+                return 3
+        except Exception as e:
+            print(f"[경고] interval 파싱 실패: {interval}, 기본값 3분 사용")
+            return 3
+
     def reset(self):
         """상태 초기화"""
         self._cash = self.initial_capital
@@ -85,13 +124,22 @@ class QQCTestEngine:
         self._total_asset = self.initial_capital
         # 초기 보유 상태 적용 (파일에서 복원된 상태)
         self._holding = self.initial_holding_state
-        self._buy_price = 0.0
+        self._buy_price = self.saved_buy_price if self.saved_buy_price is not None else 0.0
+
+        # 초기 보유 상태일 때 코인 수량 계산
+        if self._holding and self._buy_price > 0:
+            # 초기 자본의 buy_cash_ratio만큼 사용하여 매수했다고 가정
+            available_cash = self.initial_capital * self.buy_cash_ratio
+            self._coin_amount = available_cash / self._buy_price
+            self._cash = self.initial_capital - available_cash
+            print(f"[초기 보유 상태 복원] 매수가: {self._buy_price:,.0f}원, 코인 수량: {self._coin_amount:.8f}, 남은 현금: {self._cash:,.0f}원")
+
         self._buy_date = None
         self._buy_candle_index = None
         self._buy_condition_candle_index = None
-        self._buy_condition_date = None
-        self._buy_execution_date = None
-        self._buy_condition_absolute_index = None
+        self._buy_condition_date = self.saved_buy_condition_date
+        self._buy_execution_date = self.saved_buy_execution_date
+        self._buy_condition_absolute_index = None  # run 메서드에서 계산될 예정
         self._candle_buffer = []
         self._condition_check_count = 0
         self._condition_b_satisfied = 0
@@ -169,6 +217,15 @@ class QQCTestEngine:
                 result = self._check_sell_conditions(candle, current_candle_index, getattr(self, '_current_absolute_index', None))
                 if result:
                     return result
+
+                # 매도하지 않은 경우 현재 보유 상태 로깅 (디버깅용)
+                if hasattr(self, '_buy_condition_date') and self._buy_condition_date is not None:
+                    current_date = candle['date']
+                    time_diff = current_date - self._buy_condition_date
+                    if hasattr(self, '_interval_minutes') and self._interval_minutes > 0:
+                        candles_passed = int(time_diff.total_seconds() / 60 / self._interval_minutes)
+                        current_return = ((candle['close'] - self._buy_price) / self._buy_price) * 100
+                        print(f"[보유 중] 경과: {candles_passed}/{self.hold_period}캔들, 수익률: {current_return:+.2f}%, 현재가: {candle['close']:,.0f}원")
                 
                 # 매도하지 않은 경우 자산 평가만 업데이트
                 coin_value = self._coin_amount * close_price
@@ -403,41 +460,73 @@ class QQCTestEngine:
     def _check_sell_conditions(self, candle, current_candle_index, current_absolute_index):
         """
         매도 조건 확인
-        
+
         Parameters:
         - candle (dict): 현재 캔들 데이터
         - current_candle_index (int): 현재 캔들 인덱스 (버퍼 내 상대값)
         - current_absolute_index (int): 현재 캔들 절대 인덱스 (df 내 절대 위치)
-        
+
         Returns:
         - dict or None: 매도 시 거래 정보와 자산 기록, 매도하지 않으면 None
         """
         try:
-            if not self._holding or self._buy_condition_absolute_index is None:
+            if not self._holding:
                 return None
-            
+
             # 현재 수익률 계산
             current_return = ((candle['close'] - self._buy_price) / self._buy_price) * 100
-            
-            # 조건 확인한 캔들(n) 기준으로 보유 기간 계산 (절대 인덱스 사용)
-            candles_passed = current_absolute_index - self._buy_condition_absolute_index
-            
+
+            # 조건 확인한 캔들(n) 기준으로 보유 기간 계산
+            candles_passed = None
+
+            # 방법 1: 매수 조건 날짜로 계산 (모든 모드에서 정확하게 동작, 시분초 기반)
+            if self._buy_condition_date is not None:
+                # 현재 캔들 날짜와 매수 조건 확인 날짜의 시간 차이를 이용하여 경과 캔들 계산
+                current_date = candle['date']
+                buy_date = self._buy_condition_date
+
+                # 시간 차이 계산 (초 단위)
+                time_diff = current_date - buy_date
+
+                # interval에 따라 경과 캔들 수 계산
+                # 예: 3m interval이면 180초 = 1캔들
+                if hasattr(self, '_interval_minutes') and self._interval_minutes > 0:
+                    candles_passed = int(time_diff.total_seconds() / 60 / self._interval_minutes)
+                else:
+                    # interval 정보가 없으면 경고하고 기본값 사용
+                    print(f"\n[경고] interval 정보가 없어 보유 기간을 정확히 계산할 수 없습니다.")
+                    return None
+
+            # 방법 2: 절대 인덱스로 계산 (백업용, run() 메서드 내에서만 유효)
+            elif current_absolute_index is not None and self._buy_condition_absolute_index is not None:
+                candles_passed = current_absolute_index - self._buy_condition_absolute_index
+
+            else:
+                # 매수 시점 정보가 없으면 매도 불가
+                print(f"\n[경고] 매수 시점 정보가 없어 보유 기간을 계산할 수 없습니다.")
+                return None
+
             # 조건 1: n+15 캔들이 되기 전에 수익률 17.6%면 매도
             if current_return >= self.profit_target:
                 return self._execute_sell(candle, current_candle_index, 'SELL (이익실현)')
-            
+
             # 조건 2: n+15 캔들이 되기 전에 수익률 -28.6%면 손절
             if current_return <= self.stop_loss:
                 return self._execute_sell(candle, current_candle_index, 'SELL (손절)')
-            
+
             # 조건 3: n+15 캔들이 되면 무조건 매도 (조건 확인한 캔들 n 기준으로 15개 캔들 경과)
-            if candles_passed >= self.hold_period:
+            if candles_passed is not None and candles_passed >= self.hold_period:
                 # n+15 캔들의 오픈가에서 매도
                 sell_price = candle['open']
+                print(f"\n[매도 조건 만족] 보유 기간 만료")
+                print(f"  매수 조건 날짜: {self._buy_condition_date}")
+                print(f"  현재 캔들 날짜: {candle['date']}")
+                print(f"  경과 캔들 수: {candles_passed}개 (목표: {self.hold_period}개)")
+                print(f"  매도 가격: {sell_price:,.0f}원 (오픈가)")
                 return self._execute_sell_with_price(candle, current_candle_index, 'SELL (기간 만료)', sell_price)
-            
+
             return None
-            
+
         except Exception as e:
             err = traceback.format_exc()
             print("err", err)
@@ -472,6 +561,18 @@ class QQCTestEngine:
         - dict: 거래 정보와 자산 기록
         """
         try:
+            # 상태 검증
+            if self._coin_amount == 0 or self._buy_price == 0:
+                print(f"경고: 잘못된 매도 시도 - coin_amount: {self._coin_amount}, buy_price: {self._buy_price}")
+                print(f"  holding: {self._holding}, 매도 시도 날짜: {candle['date']}")
+                # 상태 초기화
+                self._holding = False
+                self._coin_amount = 0.0
+                self._buy_price = 0.0
+                self._buy_date = None
+                self._buy_condition_date = None
+                return None
+
             sell_amount = self._coin_amount * sell_price
             profit = sell_amount - (self._coin_amount * self._buy_price)
             profit_percent = (profit / (self._coin_amount * self._buy_price)) * 100
@@ -558,6 +659,21 @@ class QQCTestEngine:
             if len(df) > 0:
                 volume_avg_series.iloc[0] = 0.0
                 ma_series.iloc[0] = df['close'].iloc[0]
+
+            # 저장된 매수 조건 날짜가 있으면 절대 인덱스 계산
+            if self._buy_condition_date is not None:
+                # df 인덱스에서 매수 조건 날짜와 일치하는 인덱스 찾기
+                matching_indices = df.index == self._buy_condition_date
+                if matching_indices.any():
+                    self._buy_condition_absolute_index = matching_indices.argmax()
+                    print(f"\n[매수 시점 복원] 매수 조건 확인 날짜: {self._buy_condition_date}")
+                    print(f"  복원된 절대 인덱스: {self._buy_condition_absolute_index}")
+                    print(f"  현재 백테스트 데이터 범위: {df.index[0]} ~ {df.index[-1]}")
+                else:
+                    print(f"\n[경고] 저장된 매수 조건 날짜({self._buy_condition_date})가 현재 백테스트 데이터 범위에 없습니다.")
+                    print(f"  현재 백테스트 데이터 범위: {df.index[0]} ~ {df.index[-1]}")
+                    print(f"  매도 조건 확인을 위해 첫 번째 캔들을 매수 시점으로 간주합니다.")
+                    self._buy_condition_absolute_index = 0
 
             # 각 캔들을 하나씩 처리
             for idx in range(len(df)):

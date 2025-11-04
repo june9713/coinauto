@@ -267,12 +267,22 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
                     print(f"    - 과거 평균용: {volume_window_val}개")
                     print(f"    - 현재 캔들: 1개")
         
-        # 저장된 상태에서 코인 보유 상태 확인
+        # 저장된 상태에서 코인 보유 상태 및 매수 시점 정보 확인
         initial_holding_state = False
+        saved_buy_price = None
+        saved_buy_condition_date = None
+        saved_buy_execution_date = None
         if saved_state is not None:
             initial_holding_state = saved_state.get('holding_state', False)
+            saved_buy_price = saved_state.get('buy_price', None)
+            saved_buy_condition_date = saved_state.get('buy_condition_date', None)
+            saved_buy_execution_date = saved_state.get('buy_execution_date', None)
             print(f"\n[저장된 상태 복원]")
             print(f"  코인 보유 상태: {'보유 중' if initial_holding_state else '미보유'}")
+            if initial_holding_state:
+                print(f"  매수 가격: {saved_buy_price:,.0f}원" if saved_buy_price else "  매수 가격: 정보 없음")
+                print(f"  매수 조건 확인 날짜: {saved_buy_condition_date}" if saved_buy_condition_date else "  매수 조건 확인 날짜: 정보 없음")
+                print(f"  매수 실행 날짜: {saved_buy_execution_date}" if saved_buy_execution_date else "  매수 실행 날짜: 정보 없음")
 
         # QQC 백테스트 실행
         print("\n[단계 2] QQC 백테스트 실행 중...")
@@ -300,7 +310,11 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
             hold_period=hold_period_val,
             profit_target=profit_target_val,
             stop_loss=stop_loss_val,
-            initial_holding_state=initial_holding_state
+            initial_holding_state=initial_holding_state,
+            saved_buy_price=saved_buy_price,
+            saved_buy_condition_date=saved_buy_condition_date,
+            saved_buy_execution_date=saved_buy_execution_date,
+            interval=interval
         )
         
         # 백테스트 실행
@@ -457,7 +471,8 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
             volume_window=volume_window_val,
             ma_window=ma_window_val,
             volume_multiplier=volume_multiplier_val,
-            interval=interval
+            interval=interval,
+            hold_period=hold_period_val
         )
         
         # 서버 모드인 경우 공유 상태 업데이트
@@ -532,13 +547,29 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         # 백테스트 결과에서 최종 보유 상태 확인
         final_holding_state = result.get('last_trade_status', 'unknown') in ['buy', 'hold']
 
+        # 백테스트에서 마지막 매수 정보 추출
+        last_buy_price = None
+        last_buy_condition_date = None
+        last_buy_execution_date = None
+        if len(result.get('trades', [])) > 0:
+            # 마지막 거래 확인
+            last_trade = result['trades'][-1]
+            if last_trade['action'].startswith('BUY'):
+                # 마지막 거래가 매수인 경우
+                last_buy_price = last_trade.get('price')
+                last_buy_condition_date = last_trade.get('date')  # 백테스트에서 매수는 현재 캔들에서 발생
+                last_buy_execution_date = last_trade.get('date')
+
         # 마지막 거래 상태와 결과 반환 (실제 거래 실행을 위해)
         return {
             'last_trade_status': result.get('last_trade_status', 'unknown'),
             'result': result,
             'trades': result.get('trades', []),
             'final_asset': result.get('final_asset', initial_cap_val),
-            'final_holding_state': final_holding_state  # 백테스트 종료 시점의 코인 보유 상태
+            'final_holding_state': final_holding_state,  # 백테스트 종료 시점의 코인 보유 상태
+            'last_buy_price': last_buy_price,
+            'last_buy_condition_date': last_buy_condition_date,
+            'last_buy_execution_date': last_buy_execution_date
         }
         
     except Exception as e:
@@ -646,10 +677,11 @@ def wait_start(interval):
         left_seconds -= 1
         print(f"대기 시간: {left_seconds//3600}시간 {left_seconds%3600//60}분 {left_seconds%60}초 남음", end='\r')
 
-def execute_real_trade(trader, ticker, backtest_status, prev_status, state, buy_cash_ratio):
+def execute_real_trade(trader, ticker, backtest_status, prev_status, state, buy_cash_ratio,
+                       buy_price=None, buy_condition_date=None, buy_execution_date=None):
     """
     실제 거래 실행
-    
+
     Parameters:
     - trader: Trader 객체
     - ticker: 암호화폐 티커
@@ -657,7 +689,10 @@ def execute_real_trade(trader, ticker, backtest_status, prev_status, state, buy_
     - prev_status: 이전 상태
     - state: 현재 저장된 상태
     - buy_cash_ratio: 매수시 사용할 현금 비율
-    
+    - buy_price: 백테스트 매수 가격
+    - buy_condition_date: 백테스트 매수 조건 확인 날짜
+    - buy_execution_date: 백테스트 매수 실행 날짜
+
     Returns:
     - bool: 거래 실행 여부
     """
@@ -698,9 +733,18 @@ def execute_real_trade(trader, ticker, backtest_status, prev_status, state, buy_
                 print(f"  ✓ 매수 성공: 주문 ID {order_result['order_id']}")
                 print(f"    매수 수량: {order_result['amount']:.8f} {ticker}")
                 print(f"    매수 가격: {order_result['price']:,.0f}원")
+
+                # 매수 시점 정보 저장 (15캔들 경과 후 매도를 위해)
+                if buy_price is not None:
+                    state['buy_price'] = buy_price
+                if buy_condition_date is not None:
+                    state['buy_condition_date'] = buy_condition_date
+                if buy_execution_date is not None:
+                    state['buy_execution_date'] = buy_execution_date
+                print(f"  매수 시점 정보 저장: 가격={buy_price:,.0f}원, 조건날짜={buy_condition_date}")
             else:
                 print(f"  ✗ 매수 실패: {order_result['message']}")
-            
+
             return order_result['success']
         
         # 매도 조건: 백테스트에서 매도가 발생하고, 실제로 코인 보유 상태인 경우
@@ -723,9 +767,15 @@ def execute_real_trade(trader, ticker, backtest_status, prev_status, state, buy_
                 print(f"  ✓ 매도 성공: 주문 ID {order_result['order_id']}")
                 print(f"    매도 수량: {order_result['amount']:.8f} {ticker}")
                 print(f"    매도 가격: {order_result['price']:,.0f}원")
+
+                # 매도 시 매수 시점 정보 초기화
+                state['buy_price'] = None
+                state['buy_condition_date'] = None
+                state['buy_execution_date'] = None
+                print(f"  매수 시점 정보 초기화")
             else:
                 print(f"  ✗ 매도 실패: {order_result['message']}")
-            
+
             return order_result['success']
         
         else:
@@ -868,7 +918,10 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
                             backtest_status=backtest_status,
                             prev_status=prev_status,
                             state=saved_state,
-                            buy_cash_ratio=buy_cash_ratio_val
+                            buy_cash_ratio=buy_cash_ratio_val,
+                            buy_price=testresult.get('last_buy_price'),
+                            buy_condition_date=testresult.get('last_buy_condition_date'),
+                            buy_execution_date=testresult.get('last_buy_execution_date')
                         )
 
                         # 상태 업데이트
@@ -1094,7 +1147,10 @@ if __name__ == "__main__":
                     backtest_status=backtest_status,
                     prev_status=prev_status,
                     state=saved_state,
-                    buy_cash_ratio=buy_cash_ratio
+                    buy_cash_ratio=buy_cash_ratio,
+                    buy_price=testresult.get('last_buy_price'),
+                    buy_condition_date=testresult.get('last_buy_condition_date'),
+                    buy_execution_date=testresult.get('last_buy_execution_date')
                 )
 
                 # 상태 업데이트

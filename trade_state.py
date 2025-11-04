@@ -31,25 +31,29 @@ class TradeStateManager:
     def load_state(cls):
         """
         저장된 상태 로드
-        
+
         Returns:
         - dict: 상태 딕셔너리. None이면 저장된 상태 없음
         """
         try:
             cls.ensure_data_directory()
-            
+
             if not os.path.exists(cls.STATE_FILE):
                 return None
-            
+
             with open(cls.STATE_FILE, 'r', encoding='utf-8') as f:
                 state = json.load(f)
-            
+
             # 날짜 필드를 datetime으로 변환
             if 'last_update' in state:
                 state['last_update'] = pd.to_datetime(state['last_update'])
-            
+            if 'buy_condition_date' in state and state['buy_condition_date'] is not None:
+                state['buy_condition_date'] = pd.to_datetime(state['buy_condition_date'])
+            if 'buy_execution_date' in state and state['buy_execution_date'] is not None:
+                state['buy_execution_date'] = pd.to_datetime(state['buy_execution_date'])
+
             return state
-            
+
         except Exception as e:
             err = traceback.format_exc()
             print("err", err)
@@ -59,13 +63,13 @@ class TradeStateManager:
     def save_state(cls, state):
         """
         상태 저장
-        
+
         Parameters:
         - state (dict): 저장할 상태 딕셔너리
         """
         try:
             cls.ensure_data_directory()
-            
+
             # 복사본 생성 (날짜를 문자열로 변환)
             state_to_save = state.copy()
             if 'last_update' in state_to_save:
@@ -73,10 +77,23 @@ class TradeStateManager:
                     state_to_save['last_update'] = state_to_save['last_update'].isoformat()
                 elif isinstance(state_to_save['last_update'], datetime):
                     state_to_save['last_update'] = state_to_save['last_update'].isoformat()
-            
+
+            # 매수 시점 날짜 필드 변환
+            if 'buy_condition_date' in state_to_save and state_to_save['buy_condition_date'] is not None:
+                if isinstance(state_to_save['buy_condition_date'], pd.Timestamp):
+                    state_to_save['buy_condition_date'] = state_to_save['buy_condition_date'].isoformat()
+                elif isinstance(state_to_save['buy_condition_date'], datetime):
+                    state_to_save['buy_condition_date'] = state_to_save['buy_condition_date'].isoformat()
+
+            if 'buy_execution_date' in state_to_save and state_to_save['buy_execution_date'] is not None:
+                if isinstance(state_to_save['buy_execution_date'], pd.Timestamp):
+                    state_to_save['buy_execution_date'] = state_to_save['buy_execution_date'].isoformat()
+                elif isinstance(state_to_save['buy_execution_date'], datetime):
+                    state_to_save['buy_execution_date'] = state_to_save['buy_execution_date'].isoformat()
+
             with open(cls.STATE_FILE, 'w', encoding='utf-8') as f:
                 json.dump(state_to_save, f, indent=2, ensure_ascii=False)
-            
+
         except Exception as e:
             err = traceback.format_exc()
             print("err", err)
@@ -121,7 +138,11 @@ class TradeStateManager:
                 'holding_state': holding_state,  # 코인 보유 상태 (백테스트용, True=보유 중, False=미보유)
                 'last_backtest_status': 'none',  # 'buy', 'sell', 'hold', 'none', 'wait'
                 'last_update': pd.Timestamp.now(),
-                'sync_needed': False  # 실제 자산과 백테스트 자산 동기화 필요 여부
+                'sync_needed': False,  # 실제 자산과 백테스트 자산 동기화 필요 여부
+                # 매수 시점 정보 (15캔들 경과 후 매도를 위해 필요)
+                'buy_price': None,  # 매수 가격
+                'buy_condition_date': None,  # 조건 확인한 캔들(n)의 날짜
+                'buy_execution_date': None  # 매수 실행한 캔들(n+1)의 날짜
             }
             return state
         except Exception as e:

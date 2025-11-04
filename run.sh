@@ -1,6 +1,6 @@
 #!/bin/bash
 # 워커 수는 환경변수로 설정 가능 (기본값은 run_server.py에서 자동 설정)
-# 예: WORKERS=4 PYTHON_GIL=0 python run_server.py
+# 예: WORKERS=4 PYTHON_GIL=0 python3 run_server.py
 
 # nohup.out 파일 크기 관리 (1MB = 1048576 bytes)
 MAX_SIZE=1048576
@@ -18,4 +18,4 @@ if [ -f "$NOHUP_FILE" ]; then
     fi
 fi
 
-PYTHON_GIL=0 python run_server.py
+PYTHON_GIL=0 python3 run_server.py
