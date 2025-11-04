@@ -33,7 +33,7 @@ class Config:
     
     # 시각화 설정
     DEFAULT_GRAPH_SAVE_PATH = 'backtest_result.jpg'  # 기본 그래프 저장 경로
-    GRAPH_DPI = 60  # 그래프 해상도 (300에서 70으로로 감소)
+    GRAPH_DPI = 70  # 그래프 해상도 (300에서 70으로로 감소)
     
     # 백테스트 결과 저장 설정
     BACKTEST_RESULT_FILE = os.path.join(DATA_DIR, 'backtest_results.csv')  # 백테스트 결과 저장 파일

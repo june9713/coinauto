@@ -70,18 +70,23 @@ class ResultReporter:
                 if 'buy_price' in trade:
                     buy_price = trade['buy_price']
                     # 매수 날짜도 초 단위까지 포함하여 출력
-                    if isinstance(trade['buy_date'], pd.Timestamp):
-                        buy_date_str = trade['buy_date'].strftime('%Y-%m-%d %H:%M:%S')
-                    else:
-                        buy_date_obj = pd.to_datetime(trade['buy_date'])
-                        buy_date_str = buy_date_obj.strftime('%Y-%m-%d %H:%M:%S')
+                    buy_date_str = "날짜 정보 없음"
+                    if trade.get('buy_date') is not None:
+                        if isinstance(trade['buy_date'], pd.Timestamp):
+                            buy_date_str = trade['buy_date'].strftime('%Y-%m-%d %H:%M:%S')
+                        else:
+                            try:
+                                buy_date_obj = pd.to_datetime(trade['buy_date'])
+                                buy_date_str = buy_date_obj.strftime('%Y-%m-%d %H:%M:%S')
+                            except:
+                                buy_date_str = str(trade['buy_date'])
                     profit = trade['profit']
                     profit_percent = trade['profit_percent']
                     total_profit += profit
-                    
+
                     print(f"  매수 가격: {buy_price:,.0f}원 (매수일: {buy_date_str})")
                     print(f"  수익: {profit:,.0f}원 ({profit_percent:+.2f}%)")
-                    
+
                     if profit > 0:
                         profitable_trades += 1
                     else:

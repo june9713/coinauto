@@ -561,8 +561,8 @@
                 </div>
                 <div id="statusContent" class="loading">Loading...</div>
                 <div class="controls">
-                    <button class="btn-start" onclick="controlBacktest('start')">▶ Start</button>
-                    <button class="btn-stop" onclick="controlBacktest('stop')">⏹ Stop</button>
+                    <button id="btnStart" class="btn-start" onclick="controlBacktest('start')">▶ Start</button>
+                    <button id="btnStop" class="btn-stop" onclick="controlBacktest('stop')">⏹ Stop</button>
                 </div>
                 <div class="auto-refresh">
                     <label class="toggle">
@@ -675,13 +675,48 @@
 
                 const indicator = document.getElementById('statusIndicator');
                 const content = document.getElementById('statusContent');
+                const btnStart = document.getElementById('btnStart');
+                const btnStop = document.getElementById('btnStop');
 
                 if (data.is_running) {
                     indicator.className = 'status-indicator status-running';
+                    // Running 중일 때: Start 버튼 비활성화, Stop 버튼 활성화
+                    if (btnStart) {
+                        btnStart.disabled = true;
+                        btnStart.style.opacity = '0.5';
+                        btnStart.style.cursor = 'not-allowed';
+                    }
+                    if (btnStop) {
+                        btnStop.disabled = false;
+                        btnStop.style.opacity = '1';
+                        btnStop.style.cursor = 'pointer';
+                    }
                 } else if (data.error) {
                     indicator.className = 'status-indicator status-error';
+                    // Error 상태일 때: 둘 다 활성화
+                    if (btnStart) {
+                        btnStart.disabled = false;
+                        btnStart.style.opacity = '1';
+                        btnStart.style.cursor = 'pointer';
+                    }
+                    if (btnStop) {
+                        btnStop.disabled = false;
+                        btnStop.style.opacity = '1';
+                        btnStop.style.cursor = 'pointer';
+                    }
                 } else {
                     indicator.className = 'status-indicator status-stopped';
+                    // Stopped 상태일 때: Stop 버튼 비활성화, Start 버튼 활성화
+                    if (btnStart) {
+                        btnStart.disabled = false;
+                        btnStart.style.opacity = '1';
+                        btnStart.style.cursor = 'pointer';
+                    }
+                    if (btnStop) {
+                        btnStop.disabled = true;
+                        btnStop.style.opacity = '0.5';
+                        btnStop.style.cursor = 'not-allowed';
+                    }
                 }
 
                 let html = `

@@ -587,7 +587,7 @@ class QQCTestEngine:
                 'amount': self._coin_amount,
                 'total_value': sell_amount,
                 'buy_price': self._buy_price,
-                'buy_date': self._buy_date,
+                'buy_date': self._buy_condition_date if self._buy_condition_date is not None else self._buy_date,  # 저장된 매수 조건 날짜 사용
                 'profit': profit,
                 'profit_percent': profit_percent,
                 'total_asset': self._cash

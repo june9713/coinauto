@@ -91,7 +91,7 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         profit_target_val = profit_target if profit_target is not None else 17.6
         stop_loss_val = stop_loss if stop_loss is not None else -28.6
         
-        # 조건 딕셔너리 생성
+        # 조건 딕셔너리 생성 (initial_capital은 trade_state.json의 값 사용)
         current_condition = ConditionManager.get_qqc_condition_key(
             volume_window=volume_window_val,
             ma_window=ma_window_val,
@@ -101,7 +101,7 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
             profit_target=profit_target_val,
             stop_loss=stop_loss_val,
             price_slippage=price_slip_val,
-            initial_capital=initial_cap_val,
+            initial_capital=initial_cap_val,  # trade_state.json의 initial_capital 사용
             ticker=ticker,
             interval=interval
         )
@@ -808,7 +808,7 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
         shared_state.set_error(None)
         
         saved_state = TradeStateManager.load_state()
-        
+
         if saved_state is None:
             if auto_initialize:
                 print("\n저장된 거래 상태가 없습니다. 자동 초기화합니다.")
@@ -817,11 +817,11 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
                     balance = trader.get_balance(ticker)
                     actual_cash = balance['cash']
                     actual_coin = balance['coin']
-                    
+
                     print(f"\n현재 계좌 상태:")
                     print(f"  현금 잔고: {actual_cash:,.0f}원")
                     print(f"  코인 보유량: {actual_coin:.8f} {ticker}")
-                    
+
                     initial_capital = actual_cash
                     state = TradeStateManager.create_initial_state(
                         initial_capital=initial_capital,
@@ -832,10 +832,11 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
                     state['last_backtest_status'] = 'none'
                     TradeStateManager.save_state(state)
                     saved_state = state
-                    
+
                     print(f"\n초기화 완료:")
-                    print(f"  초기 자본: {initial_capital:,.0f}원")
-                    
+                    print(f"  초기 자본: {initial_capital:,.0f}원 (파일에 저장됨)")
+                    print("\n[중요] 이 초기 자본 값은 파일에 저장되어 프로그램 재시작 후에도 유지됩니다.")
+
                     # 공유 상태 업데이트
                     shared_state.update_trade_state(state)
                     # Set initial_capital in shared_state
@@ -853,8 +854,11 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
                 initial_capital = initial_capital or Config.DEFAULT_INITIAL_CAPITAL
                 saved_state = None
         else:
+            # 저장된 상태 파일이 있으면 파일의 초기 자본 값만 사용
             print("\n이전 거래 상태를 불러왔습니다.")
             initial_capital = saved_state.get('initial_capital', initial_capital or Config.DEFAULT_INITIAL_CAPITAL)
+            print(f"  파일에 저장된 초기 자본: {initial_capital:,.0f}원")
+            print("\n[중요] 파일에 저장된 초기 자본 값을 사용합니다. 재초기화하지 않습니다.")
             shared_state.update_trade_state(saved_state)
             # Set initial_capital in shared_state
             shared_state.set_initial_capital(initial_capital)
@@ -928,6 +932,13 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
                         saved_state['last_backtest_status'] = backtest_status
                         saved_state['holding_state'] = final_holding_state  # 백테스트 결과로 보유 상태 업데이트
                         saved_state['last_update'] = pd.Timestamp.now()
+
+                        # 매도 완료 시 매수 시점 정보 초기화
+                        if backtest_status == 'sell' and not final_holding_state:
+                            saved_state['buy_price'] = None
+                            saved_state['buy_condition_date'] = None
+                            saved_state['buy_execution_date'] = None
+                            print(f"[상태 업데이트] 매도 완료로 매수 시점 정보 초기화")
 
                         # 실제 잔고 재조회 및 업데이트
                         try:
@@ -1015,88 +1026,49 @@ if __name__ == "__main__":
     print("="*80)
     
     saved_state = TradeStateManager.load_state()
-    
+
     if saved_state is None:
         print("\n저장된 거래 상태가 없습니다.")
-        initialize = ''#input("초기화하시겠습니까? (y/n): ").strip().lower()
-        
-        if True:#initialize in 'yㅛ':
-            print("\n초기화 모드: 실제 계좌 잔고를 조회하여 초기 자본으로 설정합니다.")
-            try:
-                trader = Trader()
-                balance = trader.get_balance(ticker)
-                actual_cash = balance['cash']
-                actual_coin = balance['coin']
-                
-                print(f"\n현재 계좌 상태:")
-                print(f"  현금 잔고: {actual_cash:,.0f}원")
-                print(f"  코인 보유량: {actual_coin:.8f} {ticker}")
-                
-                # 초기 상태 저장
-                initial_capital = actual_cash  # 실제 현금 잔고를 초기 자본으로 사용
-                state = TradeStateManager.create_initial_state(
-                    initial_capital=initial_capital,
-                    actual_cash=actual_cash,
-                    actual_coin_amount=actual_coin,
-                    ticker=ticker
-                )
-                state['last_backtest_status'] = 'none'  # 초기 상태는 'none'
-                TradeStateManager.save_state(state)
-                
-                print(f"\n초기화 완료:")
-                print(f"  초기 자본: {initial_capital:,.0f}원")
-                print(f"  실제 현금: {actual_cash:,.0f}원")
-                print(f"  실제 코인: {actual_coin:.8f} {ticker}")
-                
-            except Exception as e:
-                err = traceback.format_exc()
-                print("err", err)
-                print("\n오류: 초기화 실패. 기본값으로 진행합니다.")
-                initial_capital = Config.DEFAULT_INITIAL_CAPITAL
-                saved_state = None
-        else:
-            print("\n초기화하지 않습니다. 기본값으로 진행합니다.")
+        print("\n초기화 모드: 실제 계좌 잔고를 조회하여 초기 자본으로 설정합니다.")
+        try:
+            trader = Trader()
+            balance = trader.get_balance(ticker)
+            actual_cash = balance['cash']
+            actual_coin = balance['coin']
+
+            print(f"\n현재 계좌 상태:")
+            print(f"  현금 잔고: {actual_cash:,.0f}원")
+            print(f"  코인 보유량: {actual_coin:.8f} {ticker}")
+
+            # 초기 상태 저장 (최초 1회만 실행됨)
+            initial_capital = actual_cash  # 실제 현금 잔고를 초기 자본으로 사용
+            state = TradeStateManager.create_initial_state(
+                initial_capital=initial_capital,
+                actual_cash=actual_cash,
+                actual_coin_amount=actual_coin,
+                ticker=ticker
+            )
+            state['last_backtest_status'] = 'none'  # 초기 상태는 'none'
+            TradeStateManager.save_state(state)
+
+            print(f"\n초기화 완료:")
+            print(f"  초기 자본: {initial_capital:,.0f}원 (파일에 저장됨)")
+            print(f"  실제 현금: {actual_cash:,.0f}원")
+            print(f"  실제 코인: {actual_coin:.8f} {ticker}")
+            print("\n[중요] 이 초기 자본 값은 파일에 저장되어 프로그램 재시작 후에도 유지됩니다.")
+
+        except Exception as e:
+            err = traceback.format_exc()
+            print("err", err)
+            print("\n오류: 초기화 실패. 기본값으로 진행합니다.")
             initial_capital = Config.DEFAULT_INITIAL_CAPITAL
             saved_state = None
     else:
+        # 저장된 상태 파일이 있으면 파일의 초기 자본 값만 사용
         print("\n이전 거래 상태를 불러왔습니다.")
-        initialize = ''#input("초기화하시겠습니까? (y/n): ").strip().lower()
-        
-        if True:#initialize == 'y':
-            print("\n초기화 모드: 실제 계좌 잔고를 조회하여 초기 자본으로 설정합니다.")
-            try:
-                trader = Trader()
-                balance = trader.get_balance(ticker)
-                actual_cash = balance['cash']
-                actual_coin = balance['coin']
-                
-                print(f"\n현재 계좌 상태:")
-                print(f"  현금 잔고: {actual_cash:,.0f}원")
-                print(f"  코인 보유량: {actual_coin:.8f} {ticker}")
-                
-                # 초기 상태 저장
-                initial_capital = actual_cash
-                state = TradeStateManager.create_initial_state(
-                    initial_capital=initial_capital,
-                    actual_cash=actual_cash,
-                    actual_coin_amount=actual_coin,
-                    ticker=ticker
-                )
-                state['last_backtest_status'] = 'none'
-                TradeStateManager.save_state(state)
-                saved_state = state
-                
-                print(f"\n초기화 완료:")
-                print(f"  초기 자본: {initial_capital:,.0f}원")
-                
-            except Exception as e:
-                err = traceback.format_exc()
-                print("err", err)
-                print("\n오류: 초기화 실패. 이전 상태를 유지합니다.")
-                initial_capital = saved_state.get('initial_capital', Config.DEFAULT_INITIAL_CAPITAL)
-        else:
-            print("\n이전 거래를 계속합니다.")
-            initial_capital = saved_state.get('initial_capital', Config.DEFAULT_INITIAL_CAPITAL)
+        initial_capital = saved_state.get('initial_capital', Config.DEFAULT_INITIAL_CAPITAL)
+        print(f"  파일에 저장된 초기 자본: {initial_capital:,.0f}원")
+        print("\n[중요] 파일에 저장된 초기 자본 값을 사용합니다. 재초기화하지 않습니다.")
     
     # interval 의 갱신 주기의 갱신 시점에서 백테스트가 시작할 수 있도록 현재 시간 기준으로 갱신시간까지 대기
     # 모든 interval 시간의 대기 시간을 계산하여 대기함
@@ -1157,7 +1129,14 @@ if __name__ == "__main__":
                 saved_state['last_backtest_status'] = backtest_status
                 saved_state['holding_state'] = final_holding_state  # 백테스트 결과로 보유 상태 업데이트
                 saved_state['last_update'] = pd.Timestamp.now()
-                
+
+                # 매도 완료 시 매수 시점 정보 초기화
+                if backtest_status == 'sell' and not final_holding_state:
+                    saved_state['buy_price'] = None
+                    saved_state['buy_condition_date'] = None
+                    saved_state['buy_execution_date'] = None
+                    print(f"[상태 업데이트] 매도 완료로 매수 시점 정보 초기화")
+
                 # 실제 잔고 재조회 및 업데이트
                 try:
                     balance = trader.get_balance(ticker)

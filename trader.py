@@ -115,49 +115,60 @@ class Trader:
     def get_balance(self, ticker='BTC'):
         """
         계좌 잔고 조회
-        
+
         Parameters:
         - ticker (str): 암호화폐 티커. 기본값 'BTC'
-        
+
         Returns:
-        - dict: {'cash': float, 'coin': float} - 현금(KRW) 잔고, 코인 보유량
+        - dict: {
+            'cash': float,  # KRW 전체 잔고 (주문 중 포함)
+            'coin': float,  # 코인 전체 보유량 (주문 중 포함)
+            'cash_available': float,  # KRW 주문 가능 금액
+            'coin_available': float  # 코인 주문 가능 수량
+          }
         """
         try:
             market = f'KRW-{ticker}'
-            
+
             # 주문 가능 정보 조회 (잔고 정보 포함)
             chance_info = self._get_order_chance(market)
-            
+
             print(f"\n[잔고 조회 디버깅] ticker={ticker}")
-            
+
             # bid_account: 매수 시 사용하는 화폐 (KRW) 계좌
             # ask_account: 매도 시 사용하는 화폐 (BTC) 계좌
             coin_amount = 0.0
+            coin_available = 0.0
             cash = 0.0
-            
+            cash_available = 0.0
+
             if 'bid_account' in chance_info:
                 bid_account = chance_info['bid_account']
                 if bid_account.get('currency') == 'KRW':
                     balance = float(bid_account.get('balance', 0))
                     locked = float(bid_account.get('locked', 0))  # 주문 중인 금액
-                    cash = balance - locked  # 실제 주문 가능한 금액
+                    cash = balance  # 전체 잔고 (주문 중 포함)
+                    cash_available = balance - locked  # 실제 주문 가능한 금액
                     print(f"  KRW 전체 잔고: {balance:,.0f}원")
                     print(f"  KRW 주문 중: {locked:,.0f}원")
-                    print(f"  KRW 주문 가능: {cash:,.0f}원")
-            
+                    print(f"  KRW 주문 가능: {cash_available:,.0f}원")
+
             if 'ask_account' in chance_info:
                 ask_account = chance_info['ask_account']
                 if ask_account.get('currency') == ticker.upper():
                     balance = float(ask_account.get('balance', 0))
                     locked = float(ask_account.get('locked', 0))  # 주문 중인 수량
-                    coin_amount = balance - locked  # 실제 주문 가능한 수량
+                    coin_amount = balance  # 전체 잔고 (주문 중 포함)
+                    coin_available = balance - locked  # 실제 주문 가능한 수량
                     print(f"  {ticker} 전체 잔고: {balance:.8f}")
                     print(f"  {ticker} 주문 중: {locked:.8f}")
-                    print(f"  {ticker} 주문 가능: {coin_amount:.8f}")
-            
+                    print(f"  {ticker} 주문 가능: {coin_available:.8f}")
+
             return {
                 'cash': cash,
-                'coin': coin_amount
+                'coin': coin_amount,
+                'cash_available': cash_available,
+                'coin_available': coin_available
             }
             
         except Exception as e:
@@ -180,17 +191,9 @@ class Trader:
         try:
             market = f'KRW-{ticker}'
             
-            # 주문 가능 정보 조회
-            chance_info = self._get_order_chance(market)
-            
-            # 주문 가능한 KRW 금액 계산 (주문 가능 정보에서 직접 조회)
-            available_cash = 0.0
-            if 'bid_account' in chance_info:
-                bid_account = chance_info['bid_account']
-                if bid_account.get('currency') == 'KRW':
-                    balance = float(bid_account.get('balance', 0))
-                    locked = float(bid_account.get('locked', 0))
-                    available_cash = balance - locked  # 실제 주문 가능한 금액
+            # 현재 잔고 조회 (주문 가능한 금액 포함)
+            balance_info = self.get_balance(ticker)
+            available_cash = balance_info['cash_available']  # 주문 가능한 KRW 금액
             
             # 사용할 현금 계산
             if cash_amount is not None:
@@ -293,13 +296,10 @@ class Trader:
         """
         try:
             market = f'KRW-{ticker}'
-            
-            # 주문 가능 정보 조회
-            chance_info = self._get_order_chance(market)
-            
-            # 현재 잔고 조회
+
+            # 현재 잔고 조회 (주문 가능한 수량 포함)
             balance = self.get_balance(ticker)
-            available_coin = balance['coin']
+            available_coin = balance['coin_available']  # 주문 가능한 코인 수량
             
             # 매도할 코인 수량 계산
             if coin_amount is not None:

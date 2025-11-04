@@ -38,6 +38,9 @@ async def lifespan(app: FastAPI):
     print("="*80)
     
     if _background_thread is None or not _background_thread.is_alive():
+        # 백그라운드 작업이 시작될 것임을 상태에 즉시 반영
+        shared_state.set_running(True)
+
         # 백그라운드에서 qqc_main 실행
         _background_thread = threading.Thread(
             target=_run_background_task,
@@ -380,7 +383,9 @@ async def start_background_task():
         if _background_thread is not None and _background_thread.is_alive():
             return JSONResponse(content={"message": "이미 실행 중입니다."})
 
+        # 작업이 시작될 것임을 상태에 즉시 반영
         shared_state.set_running(True)
+
         _background_thread = threading.Thread(
             target=_run_background_task,
             daemon=True,
