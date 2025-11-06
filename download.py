@@ -374,6 +374,44 @@ def _get_day_candles_with_to(market, to_date, count=200):
         return None
 
 
+def add_moving_averages(df):
+    """
+    데이터프레임에 이동평균 컬럼을 추가합니다.
+    
+    Parameters:
+    - df (pd.DataFrame): OHLCV 데이터프레임 (close 컬럼 필요)
+    
+    Returns:
+    - pd.DataFrame: 이동평균 컬럼이 추가된 데이터프레임
+    """
+    try:
+        if df is None or len(df) == 0:
+            return df
+        
+        if 'close' not in df.columns:
+            print("  경고: 'close' 컬럼이 없어 이동평균을 계산할 수 없습니다.")
+            return df
+        
+        # 데이터프레임 복사
+        df_copy = df.copy()
+        
+        # 시간순 정렬 (이동평균 계산을 위해 필수)
+        df_copy = df_copy.sort_index()
+        
+        # 이동평균 계산 (ma5, ma7, ma10)
+        ma_periods = [5, 7, 10]
+        for period in ma_periods:
+            col_name = f'ma{period}'
+            df_copy[col_name] = df_copy['close'].rolling(window=period, min_periods=1).mean()
+        
+        return df_copy
+        
+    except Exception as e:
+        err = traceback.format_exc()
+        print(f"  이동평균 계산 오류: {err}")
+        return df
+
+
 def save_history_to_dumps(df, ticker='BTC', interval='3m', base_dir='./dumps'):
     """
     데이터프레임을 dumps 폴더에 날짜별/시간별로 저장합니다.
@@ -451,16 +489,23 @@ def save_history_to_dumps(df, ticker='BTC', interval='3m', base_dir='./dumps'):
                         combined_df = pd.concat([existing_df, hour_df])
                         combined_df = combined_df.sort_index()
                         
+                        # 이동평균 추가
+                        combined_df = add_moving_averages(combined_df)
+                        
                         # 덮어쓰기된 데이터 저장
                         combined_df.to_csv(save_path, index=True)
                         print(f"  {filename}: 기존 {original_count}개 + 새 {len(hour_df)}개 (덮어쓰기: {overwritten_count}개) = {len(combined_df)}개")
                     except Exception as e:
                         # 기존 파일 로드 실패 시 새 데이터만 저장
                         print(f"  경고: 기존 파일 로드 실패 ({filename}): {e}")
+                        # 이동평균 추가
+                        hour_df = add_moving_averages(hour_df)
                         hour_df.to_csv(save_path, index=True)
                         print(f"  {filename}: 새 데이터 {len(hour_df)}개 저장")
                 else:
                     # 기존 파일이 없으면 새로 저장
+                    # 이동평균 추가
+                    hour_df = add_moving_averages(hour_df)
                     hour_df.to_csv(save_path, index=True)
                     print(f"  {filename}: 새 데이터 {len(hour_df)}개 저장")
                 
