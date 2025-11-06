@@ -130,9 +130,12 @@ class PPOTrainer:
         
         step = 0
         while step < self.config.MAX_STEPS_PER_EPISODE:
+            # 액션 마스크 가져오기
+            action_mask = env.get_action_mask()
+
             # 액션 선택
-            action, log_prob, value = self.agent.select_action(state, deterministic=False)
-            
+            action, log_prob, value = self.agent.select_action(state, deterministic=False, action_mask=action_mask)
+
             # 액션 실행
             next_state, reward, done, info = env.step(action)
             
@@ -217,9 +220,12 @@ class PPOTrainer:
         step = 0
         
         while step < self.config.MAX_STEPS_PER_EPISODE:
+            # 액션 마스크 가져오기
+            action_mask = env.get_action_mask()
+
             # 액션 선택 (결정적 선택으로 빠르게)
-            action, _, _ = self.agent.select_action(state, deterministic=True)
-            
+            action, _, _ = self.agent.select_action(state, deterministic=True, action_mask=action_mask)
+
             # 액션 실행
             next_state, reward, done, info = env.step(action)
             

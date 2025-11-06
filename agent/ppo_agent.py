@@ -39,25 +39,34 @@ class PPOTradingAgent:
             lr=config.LEARNING_RATE
         )
     
-    def select_action(self, state, deterministic=False):
+    def select_action(self, state, deterministic=False, action_mask=None):
         """
         액션 선택
-        
+
         Args:
             state: 상태 벡터 (numpy array)
             deterministic: 결정적 선택 여부
-        
+            action_mask: 유효한 액션 마스크 (numpy array, optional) [1, 1, 0, 0] 형태
+
         Returns:
             action: 선택된 액션
             action_log_prob: 액션 로그 확률
             value: 상태 가치
         """
         state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.config.DEVICE)
-        
+
         with torch.no_grad():
             action_probs = self.actor(state_tensor)
             value = self.critic(state_tensor)
-            
+
+            # 액션 마스킹 적용
+            if action_mask is not None:
+                mask_tensor = torch.FloatTensor(action_mask).unsqueeze(0).to(self.config.DEVICE)
+                # 불가능한 액션의 확률을 매우 작게 설정
+                action_probs = action_probs * mask_tensor
+                # 재정규화 (확률 합이 1이 되도록)
+                action_probs = action_probs / (action_probs.sum(dim=1, keepdim=True) + 1e-8)
+
             if deterministic:
                 action = torch.argmax(action_probs, dim=1).item()
                 action_log_prob = torch.log(action_probs[0, action] + 1e-8)
@@ -66,7 +75,7 @@ class PPOTradingAgent:
                 action = dist.sample()
                 action_log_prob = dist.log_prob(action)
                 action = action.item()
-        
+
         return action, action_log_prob.item(), value.item()
     
     def evaluate_actions(self, states, actions):

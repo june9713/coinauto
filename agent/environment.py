@@ -208,77 +208,55 @@ class TradingEnvironment:
         
         # 다음 상태
         next_state = self._get_state()
-        
+
         # 보상 계산
         new_price = self._get_current_price()
         new_portfolio_value = self._calculate_portfolio_value(new_price)
+
+        # ========== 단순화된 보상 설계 ==========
+
+        # 1. 기본 보상: 포트폴리오 가치 변화율
         reward = (new_portfolio_value - prev_portfolio_value) / (prev_portfolio_value + 1e-8)
-        
-        # ========== 개선된 보상 설계 ==========
-        
-        # 1. 매수 인센티브 (탐험 유도)
-        if action == 1:  # 매수
-            reward += 0.001  # 매수 인센티브
-        
-        # 2. 대기 페널티 (너무 오래 대기하면)
+
+        # 2. 불가능한 액션 페널티
+        reward += invalid_action_penalty
+
+        # 3. 대기 페널티 (과도한 대기 방지)
         if action == 0:  # 대기
             self.consecutive_wait_steps += 1
-            if self.consecutive_wait_steps > 50:
-                reward -= 0.01 * min((self.consecutive_wait_steps - 50) / 50, 1.0)
+            if self.consecutive_wait_steps > 100:  # 100스텝 이상 대기 시 페널티
+                reward -= 0.005
         else:
             self.consecutive_wait_steps = 0
-        
-        # 3. Buy & Hold 베이스라인 비교 (기회 비용)
-        if self.current_step > self.config.STATE_WINDOW:
-            buy_and_hold_return = (new_price - self.initial_price) / (self.initial_price + 1e-8)
-            current_return = (new_portfolio_value - self.initial_portfolio_value) / self.initial_portfolio_value
-            
-            if buy_and_hold_return > 0 and current_return < buy_and_hold_return:
-                # Buy & Hold보다 성과가 낮으면 페널티 (기회 비용)
-                opportunity_cost = (buy_and_hold_return - current_return) * 0.3
-                reward -= opportunity_cost
-            elif current_return > buy_and_hold_return:
-                # Buy & Hold보다 성과가 좋으면 보너스
-                outperformance = (current_return - buy_and_hold_return) * 0.3
-                reward += outperformance
-        
-        # 4. 매수 후 홀드 중 미실현 수익 반영
-        if self.has_position and self.entry_price > 0:
-            unrealized_return = (new_price - self.entry_price) / (self.entry_price + 1e-8)
-            reward += unrealized_return * 0.3  # 미실현 수익 반영
-        
-        # 5. 매도 시 실현 수익 보너스
+
+        # 4. 매도 시 실현 수익 보상 (거래 완결 인센티브)
         if was_selling and realized_return_on_sell != 0.0:
-            reward += realized_return_on_sell * 1.5  # 실현 수익 보너스
+            reward += realized_return_on_sell * 0.5
         
         # 최대 낙폭 업데이트
         if new_portfolio_value > self.max_portfolio_value:
             self.max_portfolio_value = new_portfolio_value
-        
+
         drawdown = (self.max_portfolio_value - new_portfolio_value) / (self.max_portfolio_value + 1e-8)
         if drawdown > self.max_drawdown:
             self.max_drawdown = drawdown
-        
-        # 위험 페널티 (최대 낙폭이 50% 초과 시)
-        if self.max_drawdown > 0.5:
-            reward -= 0.1
-        
+
+        # 위험 페널티 (최대 낙폭이 30% 초과 시)
+        if self.max_drawdown > 0.3:
+            reward -= 0.05
+
         # 종료 조건
         done = False
         if self.current_step >= len(self.data_df) - 1:
             done = True
+            # 에피소드 종료 시 최종 수익률 보상
             final_return = (new_portfolio_value - self.initial_portfolio_value) / self.initial_portfolio_value
-            
-            # Buy & Hold 대비 최종 성과
-            buy_and_hold_return = (new_price - self.initial_price) / (self.initial_price + 1e-8)
-            
-            reward += final_return * 1.0  # 절대 수익률
-            
-            # Buy & Hold 대비 성과를 크게 반영
-            if final_return < buy_and_hold_return:
-                reward -= (buy_and_hold_return - final_return) * 3.0  # 큰 페널티
-            else:
-                reward += (final_return - buy_and_hold_return) * 3.0  # 큰 보너스
+            reward += final_return * 2.0  # 최종 수익률에 가중치
+
+            # 샤프 비율 근사 보상 (수익 대비 리스크)
+            if self.max_drawdown > 0:
+                risk_adjusted_reward = final_return / (self.max_drawdown + 0.1)
+                reward += risk_adjusted_reward * 0.5
         
         if self.cash < 1000:  # 자본금이 너무 적으면 종료
             done = True

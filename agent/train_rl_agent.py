@@ -87,7 +87,7 @@ def main():
         
         # 상태 차원 계산
         num_features = len(config.FEATURES)
-        state_dim = config.STATE_WINDOW * num_features + 6  # 포지션 정보 6개 (기존 4개 + 미실현 수익률 + 최고점 대비 비율)
+        state_dim = config.STATE_WINDOW * num_features + config.POSITION_INFO_DIM
         action_dim = 4  # 대기, 매수, 홀드, 매도
         
         print(f"상태 차원: {state_dim}")
