@@ -33,6 +33,7 @@ Thumbs.db
 *.png
 *.jpg
 *.jpeg
+*.csv
 backtest_result*.jpg
 backtest_result*.png
 trade_state.json
