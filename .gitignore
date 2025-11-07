@@ -5,6 +5,7 @@ __pycache__/
 *.so
 .Python
 
+
 # Virtual Environment
 .venv/
 venv/
@@ -37,6 +38,16 @@ Thumbs.db
 backtest_result*.jpg
 backtest_result*.png
 trade_state.json
+.joblib
+.pth
+.pkl
+.pt
+.pth.tar
+.pkl.tar
+.pt.tar
+.pth.tar.gz
+.pkl.tar.gz
+.pt.tar.gz
 
 # Jupyter Notebook
 .ipynb_checkpoints
