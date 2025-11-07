@@ -412,7 +412,7 @@ def add_moving_averages(df):
         return df
 
 
-def save_history_to_dumps(df, ticker='BTC', interval='3m', base_dir='./dumps'):
+def save_history_to_dumps(df, ticker='BTC', interval='3m', base_dir='./dumps', include_ma=True):
     """
     데이터프레임을 dumps 폴더에 날짜별/시간별로 저장합니다.
     
@@ -421,6 +421,7 @@ def save_history_to_dumps(df, ticker='BTC', interval='3m', base_dir='./dumps'):
     - ticker (str): 암호화폐 티커. 기본값 'BTC'
     - interval (str): 캔들스틱 간격. 기본값 '3m'
     - base_dir (str): 기본 디렉토리. 기본값 './dumps'
+    - include_ma (bool): 이동평균 포함 여부. 기본값 True
     """
     try:
         if df is None or len(df) == 0:
@@ -478,6 +479,12 @@ def save_history_to_dumps(df, ticker='BTC', interval='3m', base_dir='./dumps'):
                         existing_df = existing_df[~existing_df.index.duplicated(keep='first')]
                         existing_df = existing_df.sort_index()
                         
+                        # no_ma 옵션이면 기존 파일의 이동평균 컬럼 제거
+                        if not include_ma:
+                            ma_columns = [col for col in existing_df.columns if col.startswith('ma')]
+                            if ma_columns:
+                                existing_df = existing_df.drop(columns=ma_columns)
+                        
                         # 덮어쓰기될 데이터 개수 계산 (덮어쓰기 전에)
                         overwritten_count = len(hour_df.index.intersection(existing_df.index))
                         original_count = len(existing_df)
@@ -489,8 +496,9 @@ def save_history_to_dumps(df, ticker='BTC', interval='3m', base_dir='./dumps'):
                         combined_df = pd.concat([existing_df, hour_df])
                         combined_df = combined_df.sort_index()
                         
-                        # 이동평균 추가
-                        combined_df = add_moving_averages(combined_df)
+                        # 이동평균 추가 (옵션에 따라)
+                        if include_ma:
+                            combined_df = add_moving_averages(combined_df)
                         
                         # 덮어쓰기된 데이터 저장
                         combined_df.to_csv(save_path, index=True)
@@ -498,14 +506,16 @@ def save_history_to_dumps(df, ticker='BTC', interval='3m', base_dir='./dumps'):
                     except Exception as e:
                         # 기존 파일 로드 실패 시 새 데이터만 저장
                         print(f"  경고: 기존 파일 로드 실패 ({filename}): {e}")
-                        # 이동평균 추가
-                        hour_df = add_moving_averages(hour_df)
+                        # 이동평균 추가 (옵션에 따라)
+                        if include_ma:
+                            hour_df = add_moving_averages(hour_df)
                         hour_df.to_csv(save_path, index=True)
                         print(f"  {filename}: 새 데이터 {len(hour_df)}개 저장")
                 else:
                     # 기존 파일이 없으면 새로 저장
-                    # 이동평균 추가
-                    hour_df = add_moving_averages(hour_df)
+                    # 이동평균 추가 (옵션에 따라)
+                    if include_ma:
+                        hour_df = add_moving_averages(hour_df)
                     hour_df.to_csv(save_path, index=True)
                     print(f"  {filename}: 새 데이터 {len(hour_df)}개 저장")
                 
@@ -532,29 +542,43 @@ def main():
     try:
         # 명령줄 인자 파싱
         if len(sys.argv) < 3:
-            print("사용법: python download.py <interval> <ticker>")
+            print("사용법: python download.py <interval> <ticker> [ma|no_ma]")
             print("예시: python download.py 3m BTC")
+            print("예시: python download.py 3m BTC ma")
+            print("예시: python download.py 3m BTC no_ma")
             sys.exit(1)
         
         interval = sys.argv[1]
         ticker = sys.argv[2].upper()
+        
+        # 세 번째 인자: ma 또는 no_ma (기본값: ma)
+        include_ma = True
+        if len(sys.argv) >= 4:
+            ma_option = sys.argv[3].lower()
+            if ma_option == 'no_ma':
+                include_ma = False
+            elif ma_option == 'ma':
+                include_ma = True
+            else:
+                print(f"경고: 알 수 없는 옵션 '{ma_option}'. 기본값 'ma'를 사용합니다.")
         
         print("="*80)
         print(f"과거 데이터 다운로드 시작")
         print("="*80)
         print(f"티커: {ticker}")
         print(f"간격: {interval}")
-        print("="*80)
+        print(f"이동평균: {'포함' if include_ma else '제외'}")
+        print("="*80) 
         
         # 최대 기록 데이터 수집
-        df = collect_maximum_historical_data(ticker=ticker, interval=interval, max_iterations=1000)
+        df = collect_maximum_historical_data(ticker=ticker, interval=interval, max_iterations=9999)
         
         if df is None or len(df) == 0:
             print("\n오류: 데이터 수집 실패")
             sys.exit(1)
         
         # dumps 폴더에 저장
-        save_history_to_dumps(df, ticker=ticker, interval=interval, base_dir='./dumps')
+        save_history_to_dumps(df, ticker=ticker, interval=interval, base_dir='./dumps', include_ma=include_ma)
         
         print("\n" + "="*80)
         print("다운로드 완료!")

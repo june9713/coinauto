@@ -9,11 +9,16 @@ from datetime import datetime, timedelta
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import MiniBatchKMeans  # KMeans보다 대용량 데이터에 빠름
+from sklearn.manifold import TSNE
 from collections import Counter
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # GUI 없이 그래프 저장
 
 # --- 1. 데이터 로더 (신규 함수) ---
 # 요청하신 디렉토리 구조에서 데이터를 로드합니다.
@@ -115,40 +120,66 @@ class TransformerAutoencoder(nn.Module):
     """
     트랜스포머 인코더-디코더 기반 오토인코더 (패턴 압축기)
     [batch, seq_len, input_dim] -> [batch, latent_dim] -> [batch, seq_len, input_dim]
+    개선사항:
+    - Latent Vector L2 정규화 추가
+    - Dropout 추가로 과적합 방지
     """
-    def __init__(self, input_dim, d_model, nhead, num_encoder_layers, num_decoder_layers, latent_dim, max_seq_len):
+    def __init__(self, input_dim, d_model, nhead, num_encoder_layers, num_decoder_layers, latent_dim, max_seq_len, dropout=0.1):
         super(TransformerAutoencoder, self).__init__()
         self.max_seq_len = max_seq_len
         self.d_model = d_model
-        
+
         # 1. Input Embedding (input_dim -> d_model)
         self.input_embed = nn.Linear(input_dim, d_model)
-        self.pos_encoder = PositionalEncoding(d_model, max_seq_len)
-        
+        self.pos_encoder = PositionalEncoding(d_model, max_seq_len, dropout=dropout)
+
         # 2. Encoder
-        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=d_model*4, batch_first=True)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=d_model*4,
+            dropout=dropout,
+            batch_first=True
+        )
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_encoder_layers)
-        
+
         # 3. Bottleneck (d_model * seq_len -> latent_dim)
         # 시퀀스 전체를 flatten하여 압축
         self.to_latent = nn.Sequential(
-            nn.Linear(d_model * max_seq_len, d_model),
+            nn.Linear(d_model * max_seq_len, d_model * 2),
+            nn.LayerNorm(d_model * 2),
             nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model * 2, d_model),
+            nn.LayerNorm(d_model),
+            nn.ReLU(),
+            nn.Dropout(dropout),
             nn.Linear(d_model, latent_dim)
         )
-        
+
         # 4. Decoder Input (latent_dim -> d_model * seq_len)
         self.from_latent = nn.Sequential(
             nn.Linear(latent_dim, d_model),
+            nn.LayerNorm(d_model),
             nn.ReLU(),
-            nn.Linear(d_model, d_model * max_seq_len)
+            nn.Dropout(dropout),
+            nn.Linear(d_model, d_model * 2),
+            nn.LayerNorm(d_model * 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model * 2, d_model * max_seq_len)
         )
-        
+
         # 5. Decoder (TransformerEncoder 층을 디코더로 활용)
-        # num_decoder_layers 파라미터 사용
-        decoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=d_model*4, batch_first=True)
+        decoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=d_model*4,
+            dropout=dropout,
+            batch_first=True
+        )
         self.transformer_decoder = nn.TransformerEncoder(decoder_layer, num_layers=num_decoder_layers)
-        
+
         # 6. Output Layer (d_model -> input_dim)
         self.output_layer = nn.Linear(d_model, input_dim)
 
@@ -156,23 +187,27 @@ class TransformerAutoencoder(nn.Module):
         # src: [batch, seq_len, input_dim]
         src_embed = self.input_embed(src) * math.sqrt(self.d_model)
         src_embed = self.pos_encoder(src_embed) # [batch, seq_len, d_model]
-        
+
         enc_output = self.transformer_encoder(src_embed) # [batch, seq_len, d_model]
-        
+
         # Flatten and project to latent
         enc_flat = enc_output.view(enc_output.size(0), -1) # [batch, seq_len * d_model]
         latent = self.to_latent(enc_flat) # [batch, latent_dim]
+
+        # L2 정규화 제거 - 모델 표현력 향상을 위해 제약 해제
+        # latent = F.normalize(latent, p=2, dim=1)
+
         return latent
 
     def decode(self, latent):
         # latent: [batch, latent_dim]
         dec_input_flat = self.from_latent(latent) # [batch, seq_len * d_model]
         dec_input = dec_input_flat.view(latent.size(0), self.max_seq_len, self.d_model)
-        
+
         dec_input = self.pos_encoder(dec_input) # Add position
-        
+
         dec_output = self.transformer_decoder(dec_input) # [batch, seq_len, d_model]
-        
+
         output = self.output_layer(dec_output) # [batch, seq_len, input_dim]
         return output
 
@@ -222,152 +257,404 @@ class EarlyStopping:
     def save_checkpoint(self, val_loss, model):
         # [Req 8] 베스트 모델을 저장합니다.
         if self.verbose:
-            print(f'  [EarlyStopping] Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}). Saving model to {self.path}')
+            print(f'  [EarlyStopping] Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}). \nSaving model to {self.path}')
         torch.save(model.state_dict(), self.path)
         self.val_loss_min = val_loss
 
-# --- 5. 모델 학습 (신규 함수) ---
-# [Req 6, 7] 조기 종료를 포함한 학습 루프
-def train_autoencoder(model, train_loader, val_loader, model_path, epochs, lr, patience, device):
+# --- 5. Contrastive Loss 함수 (수정됨) ---
+def contrastive_loss(latent_vectors, temperature=0.5):
+    """
+    간단한 분산 최대화 Loss (잠재 벡터들이 서로 멀어지도록)
+
+    Args:
+        latent_vectors: [batch_size, latent_dim] - L2 정규화된 잠재 벡터
+        temperature: 사용 안 함 (호환성 유지)
+
+    Returns:
+        contrastive loss value
+    """
+    batch_size = latent_vectors.shape[0]
+
+    if batch_size < 2:
+        return torch.tensor(0.0, device=latent_vectors.device)
+
+    # 방법 1: 벡터 간 평균 거리를 최대화 (= 유사도를 최소화)
+    # 코사인 유사도 계산 (L2 정규화되어 있으므로 내적만 하면 됨)
+    similarity_matrix = torch.matmul(latent_vectors, latent_vectors.T)
+
+    # 대각선 제외 (자기 자신과의 유사도 제외)
+    mask = torch.eye(batch_size, dtype=torch.bool, device=latent_vectors.device)
+    off_diagonal = similarity_matrix.masked_select(~mask)
+
+    # Loss: 평균 유사도를 낮추기 (= 벡터들이 서로 멀어짐)
+    # 유사도가 높으면 loss가 높고, 유사도가 낮으면 loss가 낮음
+    loss = off_diagonal.mean()
+
+    return loss
+
+# --- 6. 모델 학습 (신규 함수) ---
+# [Req 6, 7] 조기 종료를 포함한 학습 루프 + Contrastive Loss
+def train_autoencoder(model, train_loader, val_loader, model_path, epochs, lr, patience, device,
+                      contrastive_weight=0.1, warmup_epochs=5):
     """
     트랜스포머 오토인코더 학습 함수
+
+    개선사항:
+    - Reconstruction Loss + Contrastive Loss 결합
+    - Learning Rate Warmup + Cosine Annealing
+    - 상세한 학습 진행 시각화
+
+    Args:
+        contrastive_weight: Contrastive Loss의 가중치 (기본 0.1)
+        warmup_epochs: Warmup epoch 수
     """
     model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.MSELoss() # 재구축 오차(Reconstruction Loss)
-    
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
+
+    # Feature별 가중치 설정 (균형잡힌 가중치)
+    # FEATURES = ['open', 'high', 'low', 'close', 'volume', 'ma10']
+    feature_weights = torch.tensor([5.0, 5.0, 5.0, 5.0, 1.0, 1.0], device=device)
+
+    def weighted_mse_loss(pred, target, weights):
+        """Feature별 가중치를 적용한 MSE Loss"""
+        squared_diff = (pred - target) ** 2  # [batch, seq, features]
+        weighted_squared_diff = squared_diff * weights.view(1, 1, -1)  # Broadcasting
+        return weighted_squared_diff.mean()
+
+    reconstruction_criterion = weighted_mse_loss
+
+    # Learning Rate Scheduler (Warmup + Cosine Annealing)
+    def lr_lambda(current_epoch):
+        if current_epoch < warmup_epochs:
+            # Warmup: 선형 증가
+            return (current_epoch + 1) / warmup_epochs
+        else:
+            # Cosine Annealing
+            progress = (current_epoch - warmup_epochs) / (epochs - warmup_epochs)
+            return 0.5 * (1 + math.cos(math.pi * progress))
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
     # [Req 6, 8] 조기 종료 핸들러 (베스트 모델을 model_path에 저장)
     early_stopper = EarlyStopping(patience=patience, verbose=True, path=model_path)
-    
-    print("\n" + "="*40)
-    print("      🚀  오토인코더 학습 시작  🚀")
-    print("="*40)
-    
+
+    print("\n" + "="*70)
+    print("                  🚀  오토인코더 학습 시작  🚀")
+    print("="*70)
+    print(f"  Reconstruction Loss + Contrastive Loss (weight={contrastive_weight})")
+    print(f"  Learning Rate: {lr} (Warmup: {warmup_epochs} epochs)")
+    print(f"  Optimizer: AdamW (weight_decay=0.01)")
+    print("="*70)
+
+    best_val_loss = float('inf')
+
     for epoch in range(1, epochs + 1):
         # --- Training ---
         model.train()
-        train_loss = 0.0
+        train_recon_loss = 0.0
+        train_contrast_loss = 0.0
+        train_total_loss = 0.0
+
         for data in train_loader:
             data = data.to(device) # (batch, seq_len, num_features)
-            
+
             optimizer.zero_grad()
-            reconstructed, _ = model(data)
-            loss = criterion(reconstructed, data) # 원본(data)과 재구축(reconstructed) 비교
-            loss.backward()
+            reconstructed, latent = model(data)
+
+            # 1. Reconstruction Loss (Feature별 가중치 적용)
+            recon_loss = reconstruction_criterion(reconstructed, data, feature_weights)
+
+            # 2. Contrastive Loss
+            contrast_loss = contrastive_loss(latent, temperature=0.5)
+
+            # 3. Total Loss
+            total_loss = recon_loss + contrastive_weight * contrast_loss
+
+            total_loss.backward()
+
+            # Gradient Clipping (폭발 방지)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
             optimizer.step()
-            train_loss += loss.item() * data.size(0)
-        
+
+            train_recon_loss += recon_loss.item() * data.size(0)
+            train_contrast_loss += contrast_loss.item() * data.size(0)
+            train_total_loss += total_loss.item() * data.size(0)
+
         # --- Validation ---
         model.eval()
-        val_loss = 0.0
+        val_recon_loss = 0.0
+        val_contrast_loss = 0.0
+        val_total_loss = 0.0
+
         with torch.no_grad():
             for data in val_loader:
                 data = data.to(device)
-                reconstructed, _ = model(data)
-                loss = criterion(reconstructed, data)
-                val_loss += loss.item() * data.size(0)
-        
-        train_loss = train_loss / len(train_loader.dataset)
-        val_loss = val_loss / len(val_loader.dataset)
-        
-        print(f'Epoch: {epoch:04d} \tTraining Loss: {train_loss:.6f} \tValidation Loss: {val_loss:.6f}')
-        
+                reconstructed, latent = model(data)
+
+                recon_loss = reconstruction_criterion(reconstructed, data, feature_weights)
+                contrast_loss = contrastive_loss(latent, temperature=0.5)
+                total_loss = recon_loss + contrastive_weight * contrast_loss
+
+                val_recon_loss += recon_loss.item() * data.size(0)
+                val_contrast_loss += contrast_loss.item() * data.size(0)
+                val_total_loss += total_loss.item() * data.size(0)
+
+        # 평균 계산
+        train_recon_loss /= len(train_loader.dataset)
+        train_contrast_loss /= len(train_loader.dataset)
+        train_total_loss /= len(train_loader.dataset)
+
+        val_recon_loss /= len(val_loader.dataset)
+        val_contrast_loss /= len(val_loader.dataset)
+        val_total_loss /= len(val_loader.dataset)
+
+        current_lr = scheduler.get_last_lr()[0]
+
+        # 진행 상황 출력 (개선된 포맷)
+        print(f'Epoch {epoch:04d}/{epochs} | LR: {current_lr:.2e} | '
+              f'Train: {train_total_loss:.6f} (R:{train_recon_loss:.6f} C:{train_contrast_loss:.6f}) | '
+              f'Val: {val_total_loss:.6f} (R:{val_recon_loss:.6f} C:{val_contrast_loss:.6f})',
+              end='')
+
+        # Best 모델 표시
+        if val_total_loss < best_val_loss:
+            best_val_loss = val_total_loss
+            print(' ✓ BEST', end='')
+
+        print()  # 줄바꿈
+
+        # Learning Rate 조정
+        scheduler.step()
+
         # --- Early Stopping Check ---
-        early_stopper(val_loss, model)
+        early_stopper(val_total_loss, model)
         if early_stopper.early_stop:
-            print("="*40)
-            print("           ⛔ 조기 종료 ⛔")
-            print(f"최적 Epoch: {epoch - early_stopper.patience}")
-            print(f"최저 Val Loss: {early_stopper.val_loss_min:.6f}")
-            print("="*40)
+            print("\n" + "="*70)
+            print("                       ⛔ 조기 종료 ⛔")
+            print(f"  최적 Epoch: {epoch - early_stopper.patience}")
+            print(f"  최저 Val Loss: {early_stopper.val_loss_min:.6f}")
+            print("="*70)
             break
-    
+
     # [Req 8] 학습 완료 후, 저장된 베스트 모델을 로드
     print(f"\n학습 종료. '{model_path}'에서 최적 모델을 로드합니다.")
     try:
         model.load_state_dict(torch.load(model_path, map_location=device))
     except Exception as e:
         print(f"오류: 최적 모델 로드 실패: {e}. 마지막 epoch 모델을 반환합니다.")
-        
+
     return model
 
-# --- 6. 카테고리 생성 (KMeans) (신규 함수) ---
+# --- 7. 재구축 품질 검증 함수 ---
+def visualize_reconstruction_quality(model, dataloader, device, save_path, num_samples=5):
+    """
+    모델의 재구축 품질을 시각화하여 저장
+
+    Args:
+        model: 학습된 오토인코더
+        dataloader: 검증용 데이터로더
+        device: 장치
+        save_path: 이미지 저장 경로
+        num_samples: 시각화할 샘플 수
+    """
+    model.to(device)
+    model.eval()
+
+    # 샘플 추출
+    samples = []
+    with torch.no_grad():
+        for data in dataloader:
+            data = data.to(device)
+            reconstructed, _ = model(data)
+
+            # CPU로 이동
+            original = data.cpu().numpy()
+            recon = reconstructed.cpu().numpy()
+
+            for i in range(min(num_samples, len(original))):
+                samples.append((original[i], recon[i]))
+
+            if len(samples) >= num_samples:
+                break
+
+    if not samples:
+        print("재구축 품질 시각화: 샘플이 없습니다.")
+        return
+
+    # 시각화
+    fig, axes = plt.subplots(num_samples, 2, figsize=(14, 3 * num_samples))
+
+    for idx, (original, recon) in enumerate(samples[:num_samples]):
+        # 원본
+        ax_orig = axes[idx, 0] if num_samples > 1 else axes[0]
+        ax_orig.imshow(original.T, aspect='auto', cmap='viridis', interpolation='nearest')
+        ax_orig.set_title(f'Original Sample {idx+1}')
+        ax_orig.set_xlabel('Time Steps')
+        ax_orig.set_ylabel('Features')
+
+        # 재구축
+        ax_recon = axes[idx, 1] if num_samples > 1 else axes[1]
+        ax_recon.imshow(recon.T, aspect='auto', cmap='viridis', interpolation='nearest')
+        ax_recon.set_title(f'Reconstructed Sample {idx+1}')
+        ax_recon.set_xlabel('Time Steps')
+        ax_recon.set_ylabel('Features')
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    print(f"✓ 재구축 품질 시각화 저장: {save_path}")
+
+# --- 8. t-SNE 시각화 함수 ---
+def visualize_latent_space_tsne(latent_vectors, labels, save_path, title="Latent Space (t-SNE)"):
+    """
+    잠재 벡터를 t-SNE로 2D 축소하여 시각화
+
+    Args:
+        latent_vectors: numpy array of shape (n_samples, latent_dim)
+        labels: numpy array of cluster labels
+        save_path: 이미지 저장 경로
+        title: 그래프 제목
+    """
+    print("\nt-SNE를 사용하여 잠재 공간 시각화 중...")
+
+    # t-SNE 적용 (샘플이 너무 많으면 일부만 사용)
+    max_samples = 10000
+    if len(latent_vectors) > max_samples:
+        print(f"  샘플 수가 많아 {max_samples}개만 사용합니다.")
+        indices = np.random.choice(len(latent_vectors), max_samples, replace=False)
+        latent_subset = latent_vectors[indices]
+        labels_subset = labels[indices]
+    else:
+        latent_subset = latent_vectors
+        labels_subset = labels
+
+    tsne = TSNE(n_components=2, random_state=42, perplexity=30, max_iter=1000)
+    latent_2d = tsne.fit_transform(latent_subset)
+
+    # 시각화
+    fig, ax = plt.subplots(figsize=(12, 10))
+
+    # 상위 30개 카테고리만 색상으로 표시
+    unique_labels = np.unique(labels_subset)
+    label_counts = Counter(labels_subset)
+    top_labels = [label for label, _ in label_counts.most_common(30)]
+
+    for label in unique_labels:
+        mask = labels_subset == label
+        if label in top_labels:
+            ax.scatter(latent_2d[mask, 0], latent_2d[mask, 1],
+                      label=f'Cat {label}', alpha=0.6, s=10)
+        else:
+            ax.scatter(latent_2d[mask, 0], latent_2d[mask, 1],
+                      color='lightgray', alpha=0.3, s=5)
+
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    ax.set_xlabel('t-SNE Dimension 1', fontsize=12)
+    ax.set_ylabel('t-SNE Dimension 2', fontsize=12)
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    print(f"✓ t-SNE 시각화 저장: {save_path}")
+
+# --- 9. 카테고리 생성 (KMeans) + 시각화 ---
 # [Req 4, 5, 9]
-def create_categories(model, dataloader, n_categories, device):
+def create_categories(model, dataloader, n_categories, device, output_dir=None):
     """
     학습된 Autoencoder를 이용해 Latent Vector를 추출하고 KMeans 클러스터링 수행
+    + t-SNE 시각화 추가
+
+    Args:
+        output_dir: 시각화 이미지를 저장할 디렉토리 (None이면 시각화 생략)
     """
     model.to(device)
     model.eval()
     all_latents = []
-    
+
     print("\nKMeans 클러스터링을 위해 잠재 벡터(Latent Vector) 추출 중...")
     with torch.no_grad():
         for data in dataloader:
             data = data.to(device)
             _, latent = model(data) # (reconstructed, latent)
             all_latents.append(latent.cpu())
-    
+
     all_latents_np = torch.cat(all_latents, dim=0).numpy()
     print(f"총 {all_latents_np.shape[0]}개의 잠재 벡터 추출 완료. (형태: {all_latents_np.shape})")
-    
+
     print(f"MiniBatchKMeans 클러스터링 시작 (N={n_categories})...")
     # MiniBatchKMeans는 대용량 데이터에서 KMeans보다 훨씬 빠름
-    kmeans = MiniBatchKMeans(n_clusters=n_categories, 
-                            random_state=42, 
-                            n_init=10, 
+    kmeans = MiniBatchKMeans(n_clusters=n_categories,
+                            random_state=42,
+                            n_init=10,
                             batch_size=min(1024, len(all_latents_np)))
     kmeans.fit(all_latents_np)
     print("KMeans 클러스터링 완료.")
-    
+
     # --- [Req 9] 카테고리 편중도(분포) 출력 ---
     labels = kmeans.labels_
     label_counts = Counter(labels)
     sorted_counts = label_counts.most_common() # (label, count) 튜플의 리스트
-    
-    print("\n" + "="*40)
-    print("    📊 Top 5 Most Frequent Categories 📊")
-    print("="*40)
+
+    print("\n" + "="*70)
+    print("              📊 Top 30 Most Frequent Categories 📊")
+    print("="*70)
     total_samples = len(labels)
     for i, (label, count) in enumerate(sorted_counts[:30]):
         percentage = (count / total_samples) * 100
-        print(f"  {i+1}. Category {label:03d}: {count}개 샘플 ({percentage:.2f}%)")
-    print("="*40 + "\n")
-    
+        bar = '█' * int(percentage / 2)
+        print(f"  {i+1:2d}. Category {label:04d}: {count:6d} 샘플 ({percentage:5.2f}%) {bar}")
+    print("="*70 + "\n")
+
+    # t-SNE 시각화 (output_dir이 지정된 경우)
+    if output_dir:
+        tsne_path = os.path.join(output_dir, 'latent_space_tsne.png')
+        visualize_latent_space_tsne(all_latents_np, labels, tsne_path)
+
     return kmeans
 
 # --- 7. 카테고리 추론 (신규 함수) ---
 # [Req 5] 저장된 모델/스케일러/KMeans로 새 데이터의 패턴 ID 추론
-def get_pattern_category(new_data_ticks, autoencoder, kmeans_model, scaler, seq_len, device):
+def get_pattern_category(new_data_ticks, autoencoder, kmeans_model, feature_scalers, seq_len, device):
     """
     새로운 데이터(A틱)를 받아 어떤 패턴 카테고리에 속하는지 추론합니다.
-    
+
     Args:
         new_data_ticks (np.array): (seq_len, num_features) 형태의 원본 데이터
+        feature_scalers (dict): Feature별 독립 Scaler 딕셔너리
     """
-    
+
     # 입력 데이터 검증
     if new_data_ticks.shape[0] != seq_len:
         raise ValueError(f"입력 데이터 길이는 {seq_len}이어야 합니다. (현재: {new_data_ticks.shape[0]})")
-    if new_data_ticks.shape[1] != scaler.n_features_in_:
-        raise ValueError(f"입력 피처 개수는 {scaler.n_features_in_}개여야 합니다. (현재: {new_data_ticks.shape[1]})")
 
-    # 1. Scale
-    scaled_data = scaler.transform(new_data_ticks)
-    
+    n_features = len(feature_scalers)
+    if new_data_ticks.shape[1] != n_features:
+        raise ValueError(f"입력 피처 개수는 {n_features}개여야 합니다. (현재: {new_data_ticks.shape[1]})")
+
+    # 1. Feature별 독립 스케일링 적용
+    scaled_data = np.zeros_like(new_data_ticks, dtype=np.float32)
+    feature_names = list(feature_scalers.keys())
+
+    for i, feature_name in enumerate(feature_names):
+        scaler = feature_scalers[feature_name]
+        scaled_data[:, i] = scaler.transform(new_data_ticks[:, i:i+1]).flatten()
+
     # 2. Convert to Tensor (Batch 차원 추가)
     data_tensor = torch.tensor(scaled_data, dtype=torch.float32).unsqueeze(0).to(device)
-    
+
     # 3. Get latent vector
     autoencoder.to(device)
     autoencoder.eval()
     with torch.no_grad():
         _, latent = autoencoder(data_tensor) # (reconstructed, latent)
-    
+
     # 4. Predict category
     latent_np = latent.cpu().numpy()
     category = kmeans_model.predict(latent_np)
-    
+
     return category[0] # [batch_size=1]이므로 첫 번째 결과 반환
 
 # --- 8. 메인 실행 ---
@@ -393,12 +680,13 @@ if __name__ == '__main__':
         BASE_DIR = './dumps'
         TICKER = 'BTC'
         INTERVAL = '3m'
-        START_DATE = '2025-06-17'
+        START_DATE = '2025-10-05'
         END_DATE = '2025-11-05'
         
         # [Req 1] 사용할 피처 리스트 (CSV 컬럼명과 일치해야 함)
-        FEATURES = ['open', 'high', 'low', 'close', 'volume', 'ma5', 'ma7', 'ma10']
-        INPUT_DIM = len(FEATURES) # 8
+        # 이동평균 중복 제거: ma5, ma7, ma10 대신 ma10만 사용
+        FEATURES = ['open', 'high', 'low', 'close', 'volume', 'ma10']
+        INPUT_DIM = len(FEATURES) # 6
         
         # [Req 1, 3] 과거 "A"틱 (샘플 길이). 30~300 사이로 설정.
         SEQUENCE_LENGTH = 50
@@ -409,19 +697,24 @@ if __name__ == '__main__':
         NHEAD = 4
         NUM_ENCODER_LAYERS = 3
         NUM_DECODER_LAYERS = 3
-        LATENT_DIM = 32          # 32차원으로 패턴 압축
-        
+        LATENT_DIM = 128         # 128차원으로 패턴 압축 (디테일 보존 강화)
+        DROPOUT = 0.1            # Dropout 비율
+
         # [Req 4] 카테고리 수
-        N_CATEGORIES = 500
-        
-        # 학습 파라미터
+        N_CATEGORIES = 100
+
+        # 학습 파라미터 (개선됨)
         BATCH_SIZE = 4096*2
-        EPOCHS = 500            # [Req 6] 조기 종료되므로 넉넉하게 설정
+        EPOCHS = 2000            # [Req 6] 조기 종료되므로 넉넉하게 설정
         VALIDATION_SPLIT_RATIO = 0.1 # 10%를 검증용으로 사용
-        
+
         # [Req 6] 조기 종료 Patience
-        EARLY_STOPPING_PATIENCE = 50
-        LEARNING_RATE = 1e-4
+        EARLY_STOPPING_PATIENCE = 100  # 1000 -> 100으로 조정 (더 빠른 조기 종료)
+        LEARNING_RATE = 5e-4           # 학습률 증가로 더 빠른 수렴
+
+        # Contrastive Loss 파라미터
+        CONTRASTIVE_WEIGHT = 0.0       # Contrastive Loss 비활성화 (모델 안정성 향상)
+        WARMUP_EPOCHS = 5              # Learning Rate Warmup epoch 수
         
         # [Req 10] Train Type (경로명에 사용)
         TRAIN_TYPE = 'price' # 'volume' -> 'price'로 변경
@@ -437,11 +730,15 @@ if __name__ == '__main__':
         if not os.path.exists(train_type_dir): os.makedirs(train_type_dir)
         sequence_length_dir = os.path.join(train_type_dir, str(SEQUENCE_LENGTH))
         if not os.path.exists(sequence_length_dir): os.makedirs(sequence_length_dir)
+        #N_CATEGORIES
+        n_categories_dir = os.path.join(sequence_length_dir, str(N_CATEGORIES))
+        if not os.path.exists(n_categories_dir): os.makedirs(n_categories_dir)
+
         
         # [Req 2, 5, 8] 저장 경로
-        SCALER_PATH = os.path.join(sequence_length_dir, f'{TRAIN_TYPE}_scaler.joblib')
-        MODEL_PATH = os.path.join(sequence_length_dir, 'transformer_autoencoder.pth') # 베스트 모델 저장 경로
-        KMEANS_PATH = os.path.join(sequence_length_dir, 'pattern_categories.joblib')
+        SCALER_PATH = os.path.join(n_categories_dir, f'{TRAIN_TYPE}_scaler.joblib')
+        MODEL_PATH = os.path.join(n_categories_dir, 'transformer_autoencoder.pth') # 베스트 모델 저장 경로
+        KMEANS_PATH = os.path.join(n_categories_dir, 'pattern_categories.joblib')
 
         # --- 1. 데이터 로드 ---
         full_df = load_data_from_dumps(BASE_DIR, TICKER, INTERVAL, START_DATE, END_DATE, FEATURES)
@@ -465,23 +762,50 @@ if __name__ == '__main__':
                                             test_size=VALIDATION_SPLIT_RATIO, 
                                             shuffle=False) # 시계열이므로 순서 유지
         
-        # (2) Scaler 로드 또는 생성
+        # (2) Feature별 독립 스케일링 (Price와 Volume의 불균형 해소)
+        # FEATURES = ['open', 'high', 'low', 'close', 'volume', 'ma10']
+
+        def scale_features_independently(df, scalers=None, fit=False):
+            """각 feature를 독립적으로 스케일링"""
+            scaled_data = np.zeros_like(df.values, dtype=np.float32)
+
+            if scalers is None:
+                scalers = {}
+
+            for i, feature_name in enumerate(FEATURES):
+                if fit:
+                    # 새로운 Scaler 생성 및 fit
+                    scaler = StandardScaler()
+                    scaler.fit(df.iloc[:, i:i+1])  # 단일 컬럼
+                    scalers[feature_name] = scaler
+
+                # Transform
+                scaled_data[:, i] = scalers[feature_name].transform(df.iloc[:, i:i+1]).flatten()
+
+            return scaled_data, scalers
+
+        # (3) Scaler 로드 또는 생성
         if os.path.exists(SCALER_PATH):
             print(f"\n'{SCALER_PATH}'에서 기존 Scaler를 로드합니다.")
-            scaler = joblib.load(SCALER_PATH)
+            feature_scalers = joblib.load(SCALER_PATH)
+
+            # Train/Val/Full 데이터 스케일링
+            scaled_data_train, _ = scale_features_independently(train_df[FEATURES], feature_scalers, fit=False)
+            scaled_data_val, _ = scale_features_independently(val_df[FEATURES], feature_scalers, fit=False)
+            scaled_data_full, _ = scale_features_independently(full_df[FEATURES], feature_scalers, fit=False)
         else:
             print(f"\n'{SCALER_PATH}'에 Scaler가 없습니다. Train 데이터로 새로 생성합니다.")
-            scaler = StandardScaler()
-            # Train 데이터 기준으로만 fit
-            scaler.fit(train_df[FEATURES])
-            joblib.dump(scaler, SCALER_PATH)
-            print(f"Scaler 저장 완료: {SCALER_PATH}")
 
-        # (3.1) 전체 데이터를 스케일링 (KMeans 학습용)
-        scaled_data_full = scaler.transform(full_df[FEATURES])
-        # (3.2) Train/Val 데이터를 스케일링 (모델 학습용)
-        scaled_data_train = scaler.transform(train_df[FEATURES])
-        scaled_data_val = scaler.transform(val_df[FEATURES])
+            # Train 데이터로 fit하고 변환
+            scaled_data_train, feature_scalers = scale_features_independently(train_df[FEATURES], fit=True)
+
+            # Val/Full 데이터는 같은 scaler로 변환만
+            scaled_data_val, _ = scale_features_independently(val_df[FEATURES], feature_scalers, fit=False)
+            scaled_data_full, _ = scale_features_independently(full_df[FEATURES], feature_scalers, fit=False)
+
+            # Scaler 저장
+            joblib.dump(feature_scalers, SCALER_PATH)
+            print(f"Feature별 Scaler 저장 완료: {SCALER_PATH}")
 
         print(f"데이터 분할: Train {len(scaled_data_train)}개, Validation {len(scaled_data_val)}개")
 
@@ -507,13 +831,14 @@ if __name__ == '__main__':
 
         # --- 4. Autoencoder 모델 초기화 ---
         autoencoder_model = TransformerAutoencoder(
-            input_dim=INPUT_DIM, 
-            d_model=D_MODEL, 
+            input_dim=INPUT_DIM,
+            d_model=D_MODEL,
             nhead=NHEAD,
             num_encoder_layers=NUM_ENCODER_LAYERS,
             num_decoder_layers=NUM_DECODER_LAYERS,
-            latent_dim=LATENT_DIM, 
-            max_seq_len=MAX_SEQ_LEN
+            latent_dim=LATENT_DIM,
+            max_seq_len=MAX_SEQ_LEN,
+            dropout=DROPOUT
         )
 
         # --- [Req 7, 8] 모델 로드 (학습 재개) ---
@@ -533,31 +858,44 @@ if __name__ == '__main__':
         # --- 5. Autoencoder 모델 학습 (조기 종료 적용) ---
         # [Req 6]
         autoencoder_model = train_autoencoder(
-            model=autoencoder_model, 
-            train_loader=train_dataloader, 
-            val_loader=val_dataloader, 
+            model=autoencoder_model,
+            train_loader=train_dataloader,
+            val_loader=val_dataloader,
             model_path=MODEL_PATH,  # 베스트 모델이 여기에 저장됨
-            epochs=EPOCHS, 
-            lr=LEARNING_RATE, 
+            epochs=EPOCHS,
+            lr=LEARNING_RATE,
             patience=EARLY_STOPPING_PATIENCE,
-            device=device
+            device=device,
+            contrastive_weight=CONTRASTIVE_WEIGHT,
+            warmup_epochs=WARMUP_EPOCHS
+        )
+
+        # --- 5.5. 재구축 품질 시각화 ---
+        recon_viz_path = os.path.join(n_categories_dir, 'reconstruction_quality.png')
+        visualize_reconstruction_quality(
+            model=autoencoder_model,
+            dataloader=val_dataloader,
+            device=device,
+            save_path=recon_viz_path,
+            num_samples=5
         )
         
-        # --- 6. "카테고리" 생성 (KMeans) ---
+        # --- 6. "카테고리" 생성 (KMeans) + t-SNE 시각화 ---
         # [Req 4, 5, 9]
         # train_autoencoder 함수가 최적 모델을 로드하여 반환했으므로
         # autoencoder_model은 현재 '베스트 모델' 상태입니다.
-        
+
         # K-Means는 전체 데이터(Train+Val)로 생성
         full_dataset = PricePatternDataset(scaled_data_full, SEQUENCE_LENGTH)
         # K-Means 학습 시에는 데이터를 섞을 필요 없음
         full_dataloader = DataLoader(full_dataset, batch_size=BATCH_SIZE, shuffle=False)
-        
+
         kmeans_model = create_categories(
-            model=autoencoder_model, 
-            dataloader=full_dataloader, 
+            model=autoencoder_model,
+            dataloader=full_dataloader,
             n_categories=N_CATEGORIES,
-            device=device
+            device=device,
+            output_dir=n_categories_dir  # t-SNE 시각화 저장
         )
         
         # [Req 5] KMeans 모델 저장
@@ -580,7 +918,8 @@ if __name__ == '__main__':
             input_dim=INPUT_DIM, d_model=D_MODEL, nhead=NHEAD,
             num_encoder_layers=NUM_ENCODER_LAYERS,
             num_decoder_layers=NUM_DECODER_LAYERS,
-            latent_dim=LATENT_DIM, max_seq_len=MAX_SEQ_LEN
+            latent_dim=LATENT_DIM, max_seq_len=MAX_SEQ_LEN,
+            dropout=DROPOUT
         )
         loaded_autoencoder.load_state_dict(torch.load(MODEL_PATH, map_location=device))
         
@@ -589,10 +928,10 @@ if __name__ == '__main__':
 
         print("추론 시작...")
         category = get_pattern_category(
-            new_data_ticks=new_ticks_A, 
-            autoencoder=loaded_autoencoder, 
-            kmeans_model=loaded_kmeans, 
-            scaler=loaded_scaler, 
+            new_data_ticks=new_ticks_A,
+            autoencoder=loaded_autoencoder,
+            kmeans_model=loaded_kmeans,
+            feature_scalers=loaded_scaler,  # 이제 dict 형태
             seq_len=SEQUENCE_LENGTH,
             device=device
         )

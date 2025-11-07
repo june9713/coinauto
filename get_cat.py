@@ -352,7 +352,8 @@ def main():
     INTERVAL = '3m'
     TRAIN_TYPE = 'price'
     SEQUENCE_LENGTH = 50
-    START_DATE = '2025-06-16'  # 이 날짜 이후의 데이터만 처리
+    N_CATEGORIES = 1000
+    START_DATE = '2025-10-5'  # 이 날짜 이후의 데이터만 처리
     
     FEATURES = ['open', 'high', 'low', 'close', 'volume', 'ma5', 'ma7', 'ma10']
     INPUT_DIM = len(FEATURES) # 8
@@ -367,7 +368,7 @@ def main():
     
     # 모델 파일 경로
     MODELS_DIR = './models'
-    sequence_length_dir = os.path.join(MODELS_DIR, TICKER, INTERVAL, TRAIN_TYPE, str(SEQUENCE_LENGTH))
+    sequence_length_dir = os.path.join(MODELS_DIR, TICKER, INTERVAL, TRAIN_TYPE, str(SEQUENCE_LENGTH) ,str(N_CATEGORIES))
     
     SCALER_PATH = os.path.join(sequence_length_dir, f'{TRAIN_TYPE}_scaler.joblib')
     MODEL_PATH = os.path.join(sequence_length_dir, 'transformer_autoencoder.pth')

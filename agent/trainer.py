@@ -28,7 +28,7 @@ class PPOTrainer:
         self.train_env = train_env
         self.val_env = val_env
         self.config = config
-        
+
         # 로깅
         self.train_metrics = {
             'episode': [],
@@ -38,20 +38,37 @@ class PPOTrainer:
             'max_drawdown': [],
             'sharpe_ratio': []
         }
-        
+
         self.best_val_return = float('-inf')
-        
+
         # 지난 100회 평균 수익 계산용
         self.recent_returns = deque(maxlen=100)
+
+        # 배치 학습을 위한 버퍼
+        self.experience_buffer = {
+            'states': [],
+            'actions': [],
+            'old_log_probs': [],
+            'advantages': [],
+            'returns': []
+        }
     
     def train(self):
-        """메인 훈련 루프"""
+        """메인 훈련 루프 (배치 학습)"""
         print("훈련 시작...")
-        
+        print(f"설정: {self.config.EPISODES_PER_UPDATE}개 에피소드마다 {self.config.UPDATE_EPOCHS} 에폭 학습")
+
         for episode in range(self.config.NUM_EPISODES):
-            # 에피소드 실행
-            episode_return, episode_info = self._run_episode(self.train_env, training=True)
-            
+            # 에피소드 실행 (데이터만 수집, 학습은 나중에)
+            episode_return, episode_info, episode_batch = self._run_episode_collect(self.train_env)
+
+            # 경험 버퍼에 추가
+            self.experience_buffer['states'].extend(episode_batch['states'])
+            self.experience_buffer['actions'].extend(episode_batch['actions'])
+            self.experience_buffer['old_log_probs'].extend(episode_batch['old_log_probs'])
+            self.experience_buffer['advantages'].extend(episode_batch['advantages'])
+            self.experience_buffer['returns'].extend(episode_batch['returns'])
+
             # 메트릭 기록
             self.train_metrics['episode'].append(episode)
             self.train_metrics['return'].append(episode_return)
@@ -59,16 +76,22 @@ class PPOTrainer:
             self.train_metrics['total_trades'].append(episode_info['total_trades'])
             self.train_metrics['max_drawdown'].append(episode_info['max_drawdown'])
             self.train_metrics['sharpe_ratio'].append(episode_info['sharpe_ratio'])
-            
+
             # 실제 수익률 (초기 자본금 대비)
             profit_rate = episode_info['profit_rate']
-            
+
             # 지난 100회 평균 수익률 계산 (실제 수익률 기준)
             self.recent_returns.append(profit_rate)
             avg_profit_rate_100 = np.mean(self.recent_returns) if len(self.recent_returns) > 0 else 0.0
-            
+
             # 에피소드별 거래 기록 저장
             self._save_episode_deal_history(episode)
+
+            # 배치 학습 수행 (N개 에피소드마다)
+            if (episode + 1) % self.config.EPISODES_PER_UPDATE == 0:
+                print(f"\n[학습 시작] {self.config.EPISODES_PER_UPDATE}개 에피소드 데이터로 학습 중...")
+                self._batch_update()
+                print(f"[학습 완료] 버퍼 초기화\n")
             
             # 로그 출력
             if (episode + 1) % self.config.LOG_FREQ == 0:
@@ -79,6 +102,8 @@ class PPOTrainer:
                 print(f"  Total Trades: {episode_info['total_trades']}")
                 print(f"  Max Drawdown: {episode_info['max_drawdown']:.4f}")
                 print(f"  Sharpe Ratio: {episode_info['sharpe_ratio']:.4f}")
+                print(f"  Epsilon (탐험률): {self.agent.epsilon:.4f}")
+                print(f"  데이터 오프셋: {self.train_env.global_offset}/{self.train_env.total_data_length}")
             
             # 검증
             if (episode + 1) % self.config.VALIDATION_FREQ == 0:
@@ -113,13 +138,9 @@ class PPOTrainer:
         # 거래 기록 저장
         self._save_deal_history()
     
-    def _run_episode(self, env, training=True):
-        """에피소드 실행"""
-        state = env.reset()
-        
-        # 검증 시에는 빠른 실행을 위해 간소화
-        if not training:
-            return self._run_episode_validation(env)
+    def _run_episode_collect(self, env):
+        """에피소드 실행 및 데이터 수집 (학습은 나중에)"""
+        state = env.reset(use_sliding_window=True)  # 슬라이딩 윈도우 사용
         
         states = []
         actions = []
@@ -169,39 +190,31 @@ class PPOTrainer:
         # 정규화 (선택적)
         advantages = (advantages - np.mean(advantages)) / (np.std(advantages) + 1e-8)
         
-        # 배치 데이터 준비
-        batch = {
-            'states': np.array(states),
-            'actions': np.array(actions),
-            'old_log_probs': np.array(log_probs),
-            'advantages': advantages,
-            'returns': returns
+        # 에피소드 배치 데이터 (나중에 모아서 학습)
+        episode_batch = {
+            'states': states,  # 리스트 그대로
+            'actions': actions,
+            'old_log_probs': log_probs,
+            'advantages': advantages.tolist(),  # numpy array를 리스트로
+            'returns': returns.tolist()
         }
-        
-        # 텐서 변환
-        import torch
-        batch['states'] = torch.FloatTensor(batch['states'])
-        batch['actions'] = torch.LongTensor(batch['actions'])
-        batch['old_log_probs'] = torch.FloatTensor(batch['old_log_probs'])
-        batch['advantages'] = torch.FloatTensor(batch['advantages'])
-        batch['returns'] = torch.FloatTensor(batch['returns'])
-        
-        # PPO 업데이트
-        loss_dict = self.agent.update(batch)
-        
+
+        # 슬라이딩 윈도우: 에피소드 종료 후 오프셋 업데이트
+        env.update_global_offset()
+
         # 에피소드 정보
         episode_return = sum(rewards)
         final_portfolio_value = info['portfolio_value']
         total_trades = info['total_trades']
         max_drawdown = info['max_drawdown']
-        
+
         # 실제 수익률 계산 (초기 자본금 대비)
         profit_rate = (final_portfolio_value - self.config.INITIAL_CAPITAL) / self.config.INITIAL_CAPITAL
-        
+
         # 샤프 비율 계산
         returns_array = np.array(rewards)
         sharpe_ratio = calculate_sharpe_ratio(returns_array)
-        
+
         episode_info = {
             'final_portfolio_value': final_portfolio_value,
             'total_trades': total_trades,
@@ -209,12 +222,48 @@ class PPOTrainer:
             'sharpe_ratio': sharpe_ratio,
             'profit_rate': profit_rate  # 실제 수익률 추가
         }
-        
-        return episode_return, episode_info
-    
+
+        return episode_return, episode_info, episode_batch
+
+    def _batch_update(self):
+        """버퍼에 모인 여러 에피소드 데이터로 배치 학습"""
+        import torch
+
+        # 버퍼가 비어있으면 스킵
+        if len(self.experience_buffer['states']) == 0:
+            print("  경고: 버퍼가 비어있습니다")
+            return
+
+        print(f"  버퍼 크기: {len(self.experience_buffer['states'])} 스텝")
+
+        # 텐서 변환
+        batch = {
+            'states': torch.FloatTensor(self.experience_buffer['states']),
+            'actions': torch.LongTensor(self.experience_buffer['actions']),
+            'old_log_probs': torch.FloatTensor(self.experience_buffer['old_log_probs']),
+            'advantages': torch.FloatTensor(self.experience_buffer['advantages']),
+            'returns': torch.FloatTensor(self.experience_buffer['returns'])
+        }
+
+        # PPO 업데이트 (GPU 집중 사용)
+        loss_dict = self.agent.update(batch)
+        print(f"  손실 - Actor: {loss_dict['actor_loss']:.4f}, Critic: {loss_dict['critic_loss']:.4f}, Entropy: {loss_dict['entropy']:.4f}")
+
+        # Epsilon 감소 (배치당 한 번)
+        self.agent.decay_epsilon()
+
+        # 버퍼 초기화
+        self.experience_buffer = {
+            'states': [],
+            'actions': [],
+            'old_log_probs': [],
+            'advantages': [],
+            'returns': []
+        }
+
     def _run_episode_validation(self, env):
         """검증용 에피소드 실행 (빠른 실행)"""
-        state = env.reset()
+        state = env.reset(use_sliding_window=False)  # 검증은 항상 처음부터
         
         rewards = []
         step = 0
@@ -264,8 +313,8 @@ class PPOTrainer:
         # 검증 전 거래 기록 초기화 (검증 기록은 저장하지 않음)
         if hasattr(self.val_env, 'trade_history'):
             self.val_env.trade_history = []
-        
-        return self._run_episode(self.val_env, training=False)
+
+        return self._run_episode_validation(self.val_env)
     
     def _save_metrics(self):
         """메트릭 저장"""

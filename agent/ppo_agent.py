@@ -24,11 +24,11 @@ class PPOTradingAgent:
         self.config = config
         self.state_dim = state_dim
         self.action_dim = action_dim
-        
+
         # 네트워크 생성
         self.actor = ActorNetwork(state_dim, action_dim, config).to(config.DEVICE)
         self.critic = CriticNetwork(state_dim, config).to(config.DEVICE)
-        
+
         # 옵티마이저
         self.actor_optimizer = torch.optim.Adam(
             self.actor.parameters(),
@@ -38,6 +38,11 @@ class PPOTradingAgent:
             self.critic.parameters(),
             lr=config.LEARNING_RATE
         )
+
+        # 탐험을 위한 epsilon (초기 탐험 강화)
+        self.epsilon = 0.3  # 초기값: 30% 확률로 랜덤 액션
+        self.epsilon_decay = 0.9995  # 에피소드마다 감소
+        self.epsilon_min = 0.05  # 최소값: 5% 유지
     
     def select_action(self, state, deterministic=False, action_mask=None):
         """
@@ -67,7 +72,16 @@ class PPOTradingAgent:
                 # 재정규화 (확률 합이 1이 되도록)
                 action_probs = action_probs / (action_probs.sum(dim=1, keepdim=True) + 1e-8)
 
-            if deterministic:
+            # Epsilon-greedy 탐험 (학습 중일 때만, deterministic=False)
+            if not deterministic and np.random.rand() < self.epsilon:
+                # 랜덤 액션 선택 (유효한 액션 중에서)
+                if action_mask is not None:
+                    valid_actions = np.where(action_mask > 0)[0]
+                    action = np.random.choice(valid_actions)
+                else:
+                    action = np.random.randint(0, self.action_dim)
+                action_log_prob = torch.log(action_probs[0, action] + 1e-8)
+            elif deterministic:
                 action = torch.argmax(action_probs, dim=1).item()
                 action_log_prob = torch.log(action_probs[0, action] + 1e-8)
             else:
@@ -77,6 +91,10 @@ class PPOTradingAgent:
                 action = action.item()
 
         return action, action_log_prob.item(), value.item()
+
+    def decay_epsilon(self):
+        """Epsilon 감소 (에피소드마다 호출)"""
+        self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
     
     def evaluate_actions(self, states, actions):
         """

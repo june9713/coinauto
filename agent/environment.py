@@ -25,18 +25,38 @@ class TradingEnvironment:
         else:
             # 원본 가격이 없으면 정규화된 데이터에서 추정 (비권장)
             self.original_prices = None
-        
+
         # 원본 데이터프레임 저장 (타임스탬프 및 차트 데이터용)
         if original_df is not None:
             self.original_df = original_df.reset_index()
         else:
             self.original_df = None
-        
+
+        # 슬라이딩 윈도우를 위한 전역 오프셋
+        self.global_offset = 0
+        self.total_data_length = len(self.data_df)
+
         self.reset()
     
-    def reset(self):
-        """환경 초기화"""
-        self.current_step = self.config.STATE_WINDOW
+    def reset(self, use_sliding_window=True):
+        """
+        환경 초기화
+
+        Args:
+            use_sliding_window: True면 슬라이딩 윈도우 방식, False면 항상 처음부터 시작
+        """
+        if use_sliding_window:
+            # 슬라이딩 윈도우: 이전 에피소드가 끝난 지점부터 시작
+            # 만약 데이터 끝에 도달했으면 처음부터 다시 시작
+            if self.global_offset + self.config.MAX_STEPS_PER_EPISODE >= self.total_data_length:
+                self.global_offset = 0
+                print(f"  [환경] 데이터 끝 도달, 처음부터 재시작 (전체 데이터 길이: {self.total_data_length})")
+
+            self.current_step = self.global_offset + self.config.STATE_WINDOW
+        else:
+            # 기존 방식: 항상 처음부터
+            self.current_step = self.config.STATE_WINDOW
+
         self.cash = self.config.INITIAL_CAPITAL
         self.coin_amount = 0.0
         self.has_position = False
@@ -46,19 +66,28 @@ class TradingEnvironment:
         self.initial_portfolio_value = self.config.INITIAL_CAPITAL
         self.max_portfolio_value = self.config.INITIAL_CAPITAL
         self.max_drawdown = 0.0
-        
+
         # 거래 기록 (모든 액션 기록)
         self.trade_history = []
-        
+
         # 대기 페널티 추적
         self.consecutive_wait_steps = 0
-        
+
         # 초기 가격 저장 (Buy & Hold 비교용)
         self.initial_price = self._get_current_price()
-        
+
         # 초기 상태 반환
         state = self._get_state()
         return state
+
+    def update_global_offset(self):
+        """에피소드 종료 후 전역 오프셋 업데이트 (슬라이딩 윈도우용)"""
+        episode_length = self.current_step - self.global_offset - self.config.STATE_WINDOW
+        self.global_offset += episode_length
+
+        # 데이터 끝에 도달 체크
+        if self.global_offset >= self.total_data_length - self.config.MAX_STEPS_PER_EPISODE:
+            self.global_offset = 0
     
     def _get_state(self):
         """현재 상태 벡터 생성"""
@@ -213,7 +242,7 @@ class TradingEnvironment:
         new_price = self._get_current_price()
         new_portfolio_value = self._calculate_portfolio_value(new_price)
 
-        # ========== 단순화된 보상 설계 ==========
+        # ========== 개선된 보상 설계 ==========
 
         # 1. 기본 보상: 포트폴리오 가치 변화율
         reward = (new_portfolio_value - prev_portfolio_value) / (prev_portfolio_value + 1e-8)
@@ -221,17 +250,30 @@ class TradingEnvironment:
         # 2. 불가능한 액션 페널티
         reward += invalid_action_penalty
 
-        # 3. 대기 페널티 (과도한 대기 방지)
+        # 3. 대기 페널티 강화 (탐험 유도)
         if action == 0:  # 대기
             self.consecutive_wait_steps += 1
-            if self.consecutive_wait_steps > 100:  # 100스텝 이상 대기 시 페널티
-                reward -= 0.005
+            # 대기에 항상 작은 페널티 부여
+            reward -= 0.001
+            # 과도한 대기에는 더 큰 페널티
+            if self.consecutive_wait_steps > 50:
+                reward -= 0.01
         else:
             self.consecutive_wait_steps = 0
 
-        # 4. 매도 시 실현 수익 보상 (거래 완결 인센티브)
+        # 4. 매수 인센티브 (초기 탐험 유도)
+        if action == 1:  # 매수
+            reward += 0.005  # 매수 시도 자체에 작은 보상
+
+        # 5. 홀드 인센티브 (포지션 유지 중 가격 상승 시)
+        if action == 2 and self.has_position:  # 홀드
+            if reward > 0:  # 가격이 올랐다면
+                reward += 0.002  # 작은 보너스
+
+        # 6. 매도 시 실현 수익 보상 (거래 완결 인센티브)
         if was_selling and realized_return_on_sell != 0.0:
-            reward += realized_return_on_sell * 0.5
+            # 실현 수익이 양수면 큰 보상, 음수면 페널티
+            reward += realized_return_on_sell * 1.0
         
         # 최대 낙폭 업데이트
         if new_portfolio_value > self.max_portfolio_value:
