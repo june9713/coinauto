@@ -112,6 +112,42 @@ class Trader:
             print("err", err)
             raise
     
+    def get_current_price(self, ticker='BTC'):
+        """
+        현재 시장 가격 조회 (실시간 현재가)
+
+        Parameters:
+        - ticker (str): 암호화폐 티커. 기본값 'BTC'
+
+        Returns:
+        - float: 현재 시장 가격 (KRW)
+        """
+        try:
+            market = f'KRW-{ticker}'
+
+            # 현재가 조회 (Public API, 인증 불필요)
+            response = requests.get(
+                f'{self.api_url}/v1/ticker',
+                params={'markets': market},
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                if data and len(data) > 0:
+                    current_price = float(data[0].get('trade_price', 0))
+                    print(f"[실시간 현재가 조회] {ticker}: {current_price:,.0f}원")
+                    return current_price
+                else:
+                    raise ValueError(f"현재가 조회 실패: 응답 데이터 없음")
+            else:
+                raise ValueError(f"현재가 조회 실패: HTTP {response.status_code}, {response.text}")
+
+        except Exception as e:
+            err = traceback.format_exc()
+            print("err", err)
+            raise
+
     def get_balance(self, ticker='BTC'):
         """
         계좌 잔고 조회

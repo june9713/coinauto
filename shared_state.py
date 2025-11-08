@@ -74,23 +74,26 @@ class SharedState:
     def update_trade_state(self, state: Dict[str, Any]):
         """
         거래 상태 업데이트
-        
+
         Parameters:
         - state: 거래 상태 딕셔너리
         """
         try:
             with self._lock:
-                # 날짜 필드를 문자열로 변환
-                state_copy = state.copy()
-                if 'last_update' in state_copy:
-                    if isinstance(state_copy['last_update'], pd.Timestamp):
-                        state_copy['last_update'] = state_copy['last_update'].isoformat()
-                    elif isinstance(state_copy['last_update'], datetime):
-                        state_copy['last_update'] = state_copy['last_update'].isoformat()
-                self.trade_state = state_copy
+                # 모든 필드를 JSON 직렬화 가능한 형태로 변환
+                state_serialized = self._serialize_dict(state)
+                self.trade_state = state_serialized
+
+                # 디버깅 로그: trade_state의 주요 필드 타입 출력
+                if state_serialized:
+                    print(f"[DEBUG] trade_state 업데이트 완료:")
+                    for key in ['holding', 'buy_condition_date', 'last_update']:
+                        if key in state_serialized:
+                            value = state_serialized[key]
+                            print(f"  - {key}: {value} (type: {type(value).__name__})")
         except Exception as e:
             err = traceback.format_exc()
-            print("err", err)
+            print(f"[ERROR] update_trade_state 실패: {err}")
             raise
     
     def update_image_paths(self, today: Optional[str] = None, 
@@ -149,7 +152,7 @@ class SharedState:
     def get_status(self) -> Dict[str, Any]:
         """
         현재 상태 조회 (스레드 안전)
-        
+
         Returns:
         - dict: 현재 상태 딕셔너리
         """
@@ -163,7 +166,7 @@ class SharedState:
                     'last_error': self.last_error,
                     'image_paths': self.image_paths.copy()
                 }
-                
+
                 # 백테스트 결과 요약
                 if self.last_backtest_result:
                     result = self.last_backtest_result
@@ -177,11 +180,24 @@ class SharedState:
                     }
                 else:
                     status_data['backtest_summary'] = None
-                
+
+                # 디버깅 로그: 반환 전 trade_state 타입 확인
+                if self.trade_state:
+                    print(f"[DEBUG] get_status - trade_state 반환 전 타입 확인:")
+                    for key in ['holding', 'buy_condition_date', 'last_update']:
+                        if key in self.trade_state:
+                            value = self.trade_state[key]
+                            value_type = type(value).__name__
+                            print(f"  - {key}: {value} (type: {value_type})")
+
+                            # JSON 직렬화 가능한지 미리 검증
+                            if isinstance(value, (pd.Timestamp, datetime)):
+                                print(f"    [WARNING] {key} 필드가 Timestamp/datetime입니다. 직렬화 실패 가능!")
+
                 return status_data
         except Exception as e:
             err = traceback.format_exc()
-            print("err", err)
+            print(f"[ERROR] get_status 실패: {err}")
             raise
     
     def get_trades(self) -> List[Dict[str, Any]]:
@@ -241,10 +257,12 @@ class SharedState:
         try:
             with self._lock:
                 total_assets = krw + (btc * btc_price)
+                krw_btc = btc * btc_price  # BTC를 KRW로 환산한 가치
                 self.current_balance = {
                     'krw': krw,
                     'btc': btc,
                     'btc_price': btc_price,
+                    'krw_btc': krw_btc,  # BTC의 KRW 환산 가치
                     'total_assets': total_assets,
                     'timestamp': datetime.now().isoformat()
                 }
@@ -305,13 +323,58 @@ class SharedState:
 
     def set_initial_capital(self, initial_capital: float):
         """
-        초기 자산 설정
+        초기 자산 설정 및 파일에 저장
 
         Parameters:
         - initial_capital (float): 초기 자산
         """
-        with self._lock:
-            self.initial_capital = initial_capital
+        try:
+            import inspect
+            caller_frame = inspect.currentframe().f_back
+            caller_info = f"{caller_frame.f_code.co_filename}:{caller_frame.f_lineno} in {caller_frame.f_code.co_name}()"
+
+            print("="*80)
+            print(f"[TRACE] set_initial_capital() 호출됨")
+            print(f"  호출 위치: {caller_info}")
+            print(f"  설정할 값: {initial_capital:,.0f}원")
+            print(f"  현재 메모리 값: {self.initial_capital:,.0f}원" if self.initial_capital else "  현재 메모리 값: None")
+            print("="*80)
+
+            with self._lock:
+                old_value = self.initial_capital
+                self.initial_capital = initial_capital
+                print(f"[TRACE] 메모리 업데이트: {old_value} -> {initial_capital:,.0f}원")
+
+            # trade_state.json 업데이트
+            from trade_state import TradeStateManager
+            state = TradeStateManager.load_state()
+            print(f"[TRACE] trade_state.json 로드됨")
+            if state is not None:
+                old_state_value = state.get('initial_capital', 'NOT_SET')
+                print(f"  기존 trade_state.json 값: {old_state_value}")
+                state['initial_capital'] = initial_capital
+                TradeStateManager.save_state(state)
+                print(f"[TRACE] trade_state.json 저장 완료: {old_state_value} -> {initial_capital:,.0f}원")
+            else:
+                print(f"[TRACE] trade_state.json이 None이므로 저장 생략")
+
+            # backtest_conditions.json 업데이트
+            from condition_manager import ConditionManager
+            condition = ConditionManager.load_condition()
+            print(f"[TRACE] backtest_conditions.json 로드됨")
+            if condition is not None:
+                old_condition_value = condition.get('initial_capital', 'NOT_SET')
+                print(f"  기존 backtest_conditions.json 값: {old_condition_value}")
+                condition['initial_capital'] = initial_capital
+                ConditionManager.save_condition(condition)
+                print(f"[TRACE] backtest_conditions.json 저장 완료: {old_condition_value} -> {initial_capital:,.0f}원")
+            else:
+                print(f"[TRACE] backtest_conditions.json이 None이므로 저장 생략")
+            print("="*80)
+        except Exception as e:
+            err = traceback.format_exc()
+            print("err", err)
+            raise
 
     def get_initial_capital(self) -> Optional[float]:
         """

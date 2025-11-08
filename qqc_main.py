@@ -503,6 +503,8 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
                 days_3=image_3days,
                 days_5=image_5days
             )
+            # df_result를 result에 포함시켜 저장 (백테스트 실행 데이터)
+            result['df_result'] = df_for_backtest
             shared_state.update_backtest_result(result, result.get('trades', []))
         except Exception as e:
             print(f"경고: 공유 상태 업데이트 실패: {str(e)}")
@@ -569,7 +571,8 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
             'final_holding_state': final_holding_state,  # 백테스트 종료 시점의 코인 보유 상태
             'last_buy_price': last_buy_price,
             'last_buy_condition_date': last_buy_condition_date,
-            'last_buy_execution_date': last_buy_execution_date
+            'last_buy_execution_date': last_buy_execution_date,
+            'df_result': df_for_backtest  # 백테스트 결과 데이터프레임 (마지막 캔들 가격 조회용)
         }
         
     except Exception as e:
@@ -594,6 +597,10 @@ def wait_start(interval):
             force_wait = True
 
         while ( force_wait or now.minute % 3 != 0):
+            # 종료 신호 체크
+            if not shared_state.is_running:
+                print("\n대기 중 종료 신호 수신")
+                return
             time.sleep(1)
             if now.minute % 3 !=0:
                 force_wait = False
@@ -614,6 +621,10 @@ def wait_start(interval):
             force_wait = True
 
         while ( force_wait or now.minute % 5 != 0):
+            # 종료 신호 체크
+            if not shared_state.is_running:
+                print("\n대기 중 종료 신호 수신")
+                return
             time.sleep(1)
             if now.minute % 5 !=0:
                 force_wait = False
@@ -634,6 +645,10 @@ def wait_start(interval):
             force_wait = True
 
         while ( force_wait or now.minute % 10 != 0):
+            # 종료 신호 체크
+            if not shared_state.is_running:
+                print("\n대기 중 종료 신호 수신")
+                return
             time.sleep(1)
             if now.minute % 10 !=0:
                 force_wait = False
@@ -654,6 +669,10 @@ def wait_start(interval):
             force_wait = True
 
         while ( force_wait or now.minute % 30 != 0):
+            # 종료 신호 체크
+            if not shared_state.is_running:
+                print("\n대기 중 종료 신호 수신")
+                return
             time.sleep(1)
             if now.minute % 30 !=0:
                 force_wait = False
@@ -668,11 +687,15 @@ def wait_start(interval):
                 next_start_time = next_start_time + timedelta(minutes=30)
             left_seconds = int((next_start_time - now).total_seconds() + 10)
             print(f"대기 시간: {left_seconds//3600}시간 {left_seconds%3600//60}분 {left_seconds%60}초 남음", end='\r')
-    
+
     else:
         pass
     left_seconds = 10
     for i in range(10):
+        # 종료 신호 체크
+        if not shared_state.is_running:
+            print("\n대기 중 종료 신호 수신")
+            return
         time.sleep(1)
         left_seconds -= 1
         print(f"대기 시간: {left_seconds//3600}시간 {left_seconds%3600//60}분 {left_seconds%60}초 남음", end='\r')
@@ -822,6 +845,12 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
                     print(f"  현금 잔고: {actual_cash:,.0f}원")
                     print(f"  코인 보유량: {actual_coin:.8f} {ticker}")
 
+                    print("="*80)
+                    print(f"[TRACE] run_server_mode - 자동 초기화 경로")
+                    print(f"  actual_cash (계좌 잔고): {actual_cash:,.0f}원")
+                    print(f"  이 값을 initial_capital로 설정합니다")
+                    print("="*80)
+
                     initial_capital = actual_cash
                     state = TradeStateManager.create_initial_state(
                         initial_capital=initial_capital,
@@ -840,6 +869,7 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
                     # 공유 상태 업데이트
                     shared_state.update_trade_state(state)
                     # Set initial_capital in shared_state
+                    print(f"[TRACE] run_server_mode에서 shared_state.set_initial_capital({initial_capital:,.0f}) 호출")
                     shared_state.set_initial_capital(initial_capital)
 
                 except Exception as e:
@@ -856,11 +886,25 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
         else:
             # 저장된 상태 파일이 있으면 파일의 초기 자본 값만 사용
             print("\n이전 거래 상태를 불러왔습니다.")
+            print("="*80)
+            print(f"[TRACE] run_server_mode - 저장된 상태 로드 경로")
+            print(f"  saved_state 내용: {saved_state}")
+            print(f"  saved_state['initial_capital']: {saved_state.get('initial_capital', 'NOT_SET')}")
+            print("="*80)
+
             initial_capital = saved_state.get('initial_capital', initial_capital or Config.DEFAULT_INITIAL_CAPITAL)
             print(f"  파일에 저장된 초기 자본: {initial_capital:,.0f}원")
             print("\n[중요] 파일에 저장된 초기 자본 값을 사용합니다. 재초기화하지 않습니다.")
+            
+            # start_date가 없으면 기본값 설정 (기존 파일 호환성)
+            if 'start_date' not in saved_state or saved_state.get('start_date') is None:
+                print("\n[INFO] 저장된 상태에 start_date가 없어 현재 시간으로 설정합니다.")
+                saved_state['start_date'] = pd.Timestamp.now()
+                TradeStateManager.save_state(saved_state)
+            
             shared_state.update_trade_state(saved_state)
             # Set initial_capital in shared_state
+            print(f"[TRACE] run_server_mode에서 shared_state.set_initial_capital({initial_capital:,.0f}) 호출 (저장된 상태에서)")
             shared_state.set_initial_capital(initial_capital)
         
         # QQC 전략 변수 설정 (기본값 적용)
@@ -884,7 +928,72 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
         except Exception as e:
             print(f"경고: 실제 거래 기능 초기화 실패: {str(e)}")
             print("백테스트만 실행됩니다.")
-        
+
+        # 15초마다 잔고를 조회하는 별도 스레드 시작
+        balance_update_thread = None
+        if trader is not None:
+            import threading
+            import time
+
+            def update_balance_periodically():
+                """15초마다 잔고를 조회하여 shared_state 업데이트"""
+                print("\n[잔고 자동 업데이트 스레드] 시작됨 (15초 간격)")
+
+                while shared_state.is_running:
+                    try:
+                        # 1. 잔고 조회 (KRW, BTC)
+                        balance = trader.get_balance(ticker)
+
+                        # 2. 실시간 현재가 조회 (Upbit API 현재가)
+                        btc_price = trader.get_current_price(ticker)
+
+                        # 3. KRW_BTC 계산: BTC 보유량 * 실시간 현재가
+                        krw_btc = balance['coin'] * btc_price
+
+                        # 4. Total Assets 계산: KRW 잔고 + KRW_BTC
+                        total_assets = balance['cash'] + krw_btc
+
+                        print(f"[잔고 자동 업데이트] KRW={balance['cash']:,.0f}, BTC={balance['coin']:.8f}, 실시간가격={btc_price:,.0f}, KRW_BTC={krw_btc:,.0f}, 총자산={total_assets:,.0f}")
+
+                        # 5. 공유 상태에 잔고 업데이트
+                        shared_state.update_balance(
+                            krw=balance['cash'],
+                            btc=balance['coin'],
+                            btc_price=btc_price  # 실시간 현재가 사용
+                        )
+
+                        # 6. saved_state 업데이트
+                        if saved_state is not None:
+                            # 파일에서 현재 initial_capital 읽어오기 (보존용)
+                            current_file_state = TradeStateManager.load_state()
+                            original_initial_capital = current_file_state.get('initial_capital') if current_file_state else saved_state.get('initial_capital')
+
+                            saved_state['actual_cash'] = balance['cash']
+                            saved_state['actual_coin_amount'] = balance['coin']
+                            saved_state['holding_state'] = balance['coin'] > 0
+                            # initial_capital은 원래 값으로 복원
+                            saved_state['initial_capital'] = original_initial_capital
+                            TradeStateManager.save_state(saved_state)
+                            shared_state.update_trade_state(saved_state)
+
+                    except Exception as e:
+                        print(f"[잔고 자동 업데이트] 오류: {str(e)}")
+
+                    # 15초 대기 (1초씩 나누어 종료 신호 체크)
+                    for _ in range(15):
+                        if not shared_state.is_running:
+                            break
+                        time.sleep(1)
+
+                print("\n[잔고 자동 업데이트 스레드] 종료됨")
+
+            balance_update_thread = threading.Thread(
+                target=update_balance_periodically,
+                daemon=True,
+                name="BalanceUpdateThread"
+            )
+            balance_update_thread.start()
+
         while shared_state.is_running:
             try:
                 testresult = main(
@@ -940,25 +1049,51 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
                             saved_state['buy_execution_date'] = None
                             print(f"[상태 업데이트] 매도 완료로 매수 시점 정보 초기화")
 
-                        # 실제 잔고 재조회 및 업데이트
+                        # 파일에서 현재 initial_capital 읽어오기 (보존용)
+                        current_file_state = TradeStateManager.load_state()
+                        original_initial_capital = current_file_state.get('initial_capital') if current_file_state else saved_state.get('initial_capital')
+                        saved_state['initial_capital'] = original_initial_capital
+
+                        TradeStateManager.save_state(saved_state)
+                        shared_state.update_trade_state(saved_state)
+                    else:
+                        if saved_state is None:
+                            print("\n경고: 거래 상태가 저장되지 않았습니다. 실제 거래를 실행하지 않습니다.")
+                        if trader is None:
+                            print("\n경고: 실제 거래 기능이 사용 불가능합니다. 백테스트만 실행됩니다.")
+
+                    # 실제 잔고 재조회 및 업데이트 (매 루프마다 실행)
+                    if trader is not None:
                         try:
                             balance = trader.get_balance(ticker)
-                            saved_state['actual_cash'] = balance['cash']
-                            saved_state['actual_coin_amount'] = balance['coin']
-                            # 실제 코인 보유량을 기반으로 holding_state 업데이트 (실제 거래 반영)
-                            saved_state['holding_state'] = balance['coin'] > 0
 
-                            # 현재 BTC 가격 조회 (최근 백테스트 결과에서)
+                            # saved_state가 있으면 잔고 정보 업데이트
+                            if saved_state is not None:
+                                # 파일에서 현재 initial_capital 읽어오기 (보존용)
+                                current_file_state = TradeStateManager.load_state()
+                                original_initial_capital = current_file_state.get('initial_capital') if current_file_state else saved_state.get('initial_capital')
+
+                                saved_state['actual_cash'] = balance['cash']
+                                saved_state['actual_coin_amount'] = balance['coin']
+                                # 실제 코인 보유량을 기반으로 holding_state 업데이트 (실제 거래 반영)
+                                saved_state['holding_state'] = balance['coin'] > 0
+                                # initial_capital은 원래 값으로 복원
+                                saved_state['initial_capital'] = original_initial_capital
+                                TradeStateManager.save_state(saved_state)
+                                shared_state.update_trade_state(saved_state)
+
+                            # 현재 BTC 가격 조회 (백테스트 결과의 마지막 캔들 close 가격 사용)
                             btc_price = 0
+                            if testresult and 'df_result' in testresult:
+                                df_result = testresult['df_result']
+                                if df_result is not None and len(df_result) > 0:
+                                    # 마지막 캔들의 close 가격을 현재 가격으로 사용
+                                    btc_price = float(df_result.iloc[-1]['close'])
+                                    print(f"  현재 BTC 가격: {btc_price:,.0f}원 (마지막 캔들 close)")
+
+                            # 결과에 잔고 정보 추가 (CSV 저장용)
                             if testresult and 'result' in testresult:
                                 result_data = testresult['result']
-                                trades = result_data.get('trades', [])
-                                if trades and len(trades) > 0:
-                                    # 마지막 거래 가격을 현재 가격으로 사용
-                                    last_trade = trades[-1]
-                                    btc_price = last_trade.get('price', 0)
-
-                                # 결과에 잔고 정보 추가 (CSV 저장용)
                                 result_data['current_krw_balance'] = balance['cash']
                                 result_data['current_btc_balance'] = balance['coin']
 
@@ -969,16 +1104,9 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
                                     btc=balance['coin'],
                                     btc_price=btc_price
                                 )
+                                print(f"  잔고 업데이트: KRW={balance['cash']:,.0f}, BTC={balance['coin']:.8f}, KRW_BTC={balance['coin']*btc_price:,.0f}")
                         except Exception as e:
                             print(f"경고: 잔고 조회 실패: {str(e)}")
-
-                        TradeStateManager.save_state(saved_state)
-                        shared_state.update_trade_state(saved_state)
-                    else:
-                        if saved_state is None:
-                            print("\n경고: 거래 상태가 저장되지 않았습니다. 실제 거래를 실행하지 않습니다.")
-                        if trader is None:
-                            print("\n경고: 실제 거래 기능이 사용 불가능합니다. 백테스트만 실행됩니다.")
                 else:
                     print(f"last_trade_status: {testresult}")
                 
@@ -1168,6 +1296,11 @@ if __name__ == "__main__":
                         )
                 except Exception as e:
                     print(f"경고: 잔고 조회 실패: {str(e)}")
+
+                # 파일에서 현재 initial_capital 읽어오기 (보존용)
+                current_file_state = TradeStateManager.load_state()
+                original_initial_capital = current_file_state.get('initial_capital') if current_file_state else saved_state.get('initial_capital')
+                saved_state['initial_capital'] = original_initial_capital
 
                 TradeStateManager.save_state(saved_state)
             else:

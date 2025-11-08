@@ -271,6 +271,7 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 15px;
+            table-layout: auto;
         }
 
         th, td {
@@ -294,8 +295,10 @@
         .table-container {
             max-height: 400px;
             overflow-y: auto;
+            overflow-x: auto;
             border-radius: 8px;
             border: 1px solid #e2e8f0;
+            width: 100%;
         }
 
         .loading {
@@ -583,13 +586,12 @@
                         <input type="number" id="initialCapitalInput" placeholder="초기 자산 입력" style="flex: 1; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1em;">
                         <button onclick="updateInitialCapital()" style="padding: 10px 20px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">설정</button>
                     </div>
+                    <label style="display: block; margin-top: 15px; margin-bottom: 8px; font-weight: 600; color: #475569;">시작 날짜</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="date" id="startDateInput" style="flex: 1; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 1em;">
+                        <button onclick="updateStartDate()" style="padding: 10px 20px; background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">설정</button>
+                    </div>
                 </div>
-            </div>
-
-            <!-- Results Summary Card -->
-            <div class="card">
-                <div class="card-title">📊 Performance Summary</div>
-                <div id="resultsContent" class="loading">Loading...</div>
             </div>
 
             <!-- Total Assets History Chart -->
@@ -660,7 +662,6 @@
             Promise.all([
                 loadStatus().catch(err => console.error('loadStatus error:', err)),
                 loadBalance().catch(err => console.error('loadBalance error:', err)),
-                loadResults().catch(err => console.error('loadResults error:', err)),
                 loadTrades().catch(err => console.error('loadTrades error:', err)),
                 loadAssetsHistory().catch(err => console.error('loadAssetsHistory error:', err))
             ]).finally(() => {
@@ -772,6 +773,9 @@
 
                 // Calculate asset increase rate if initial_capital is available and not zero
                 let assetIncreaseRateHtml = '';
+                let dailyAvgReturnHtml = '';
+                let elapsedDaysHtml = '';
+                
                 if (data.initial_capital && data.initial_capital !== 0) {
                     const increaseRate = ((data.total_assets / data.initial_capital) * 100.0).toFixed(2);
                     const increaseClass = increaseRate >= 100 ? 'positive' : 'negative';
@@ -781,12 +785,44 @@
                             <div class="stat-value ${increaseClass}">${increaseRate}%</div>
                         </div>
                     `;
+                    
+                    // 일일 평균 수익률 표시 (자산증가율 아래)
+                    if (data.daily_avg_return !== undefined && data.daily_avg_return !== null) {
+                        const dailyAvgClass = data.daily_avg_return >= 0 ? 'positive' : 'negative';
+                        dailyAvgReturnHtml = `
+                            <div class="stat-item">
+                                <div class="stat-label">1일당 평균 수익율</div>
+                                <div class="stat-value ${dailyAvgClass}">${parseFloat(data.daily_avg_return).toFixed(2)}%</div>
+                            </div>
+                        `;
+                    }
+                }
+                
+                // 경과일수 표시 (자산증가율과 Total Assets 사이)
+                if (data.elapsed_days !== undefined && data.elapsed_days !== null) {
+                    elapsedDaysHtml = `
+                        <div class="stat-item">
+                            <div class="stat-label">경과일수</div>
+                            <div class="stat-value">${data.elapsed_days}일</div>
+                        </div>
+                    `;
                 }
 
                 // Update initial capital input field
                 const initialCapitalInput = document.getElementById('initialCapitalInput');
                 if (initialCapitalInput && data.initial_capital) {
                     initialCapitalInput.value = parseInt(data.initial_capital || 0);
+                }
+                
+                // Update start date input field
+                const startDateInput = document.getElementById('startDateInput');
+                if (startDateInput && data.start_date) {
+                    // ISO 형식의 날짜를 YYYY-MM-DD 형식으로 변환
+                    const dateObj = new Date(data.start_date);
+                    const year = dateObj.getFullYear();
+                    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                    const day = String(dateObj.getDate()).padStart(2, '0');
+                    startDateInput.value = `${year}-${month}-${day}`;
                 }
 
                 content.innerHTML = `
@@ -804,70 +840,22 @@
                             <div class="stat-value">${parseInt(data.btc_price || 0).toLocaleString()} KRW</div>
                         </div>
                         <div class="stat-item">
+                            <div class="stat-label">KRW_BTC</div>
+                            <div class="stat-value">${parseInt(data.krw_btc || 0).toLocaleString()} KRW</div>
+                        </div>
+                        ${assetIncreaseRateHtml}
+                        ${dailyAvgReturnHtml}
+                        ${elapsedDaysHtml}
+                        <div class="stat-item">
                             <div class="stat-label">Total Assets</div>
                             <div class="stat-value ${totalClass}">${parseInt(data.total_assets || 0).toLocaleString()} KRW</div>
                         </div>
-                        ${assetIncreaseRateHtml}
                     </div>
                 `;
             } catch (error) {
                 console.error('Failed to load balance:', error);
                 document.getElementById('balanceContent').innerHTML =
                     `<div class="error">Failed to load balance</div>`;
-            }
-        }
-
-        async function loadResults() {
-            try {
-                const response = await fetchWithTimeout(`${API_BASE}/api/results`);
-                const data = await response.json();
-                const content = document.getElementById('resultsContent');
-
-                if (data.error || !data.total_return) {
-                    content.innerHTML = `
-                        <div class="empty-state">
-                            <div class="empty-state-icon">📊</div>
-                            <p>No results yet</p>
-                        </div>
-                    `;
-                    return;
-                }
-
-                const returnClass = parseFloat(data.total_return) >= 0 ? 'positive' : 'negative';
-                const mddClass = 'negative';
-
-                content.innerHTML = `
-                    <div class="stat-grid">
-                        <div class="stat-item">
-                            <div class="stat-label">Total Return</div>
-                            <div class="stat-value ${returnClass}">${data.total_return}%</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Win Rate</div>
-                            <div class="stat-value">${data.win_rate}%</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Total Trades</div>
-                            <div class="stat-value">${data.total_trades || 0}</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Max Drawdown</div>
-                            <div class="stat-value ${mddClass}">${data.mdd}%</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Final Capital</div>
-                            <div class="stat-value">${parseInt(data.final_capital || 0).toLocaleString()} KRW</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-label">Sharpe Ratio</div>
-                            <div class="stat-value">${data.sharpe_ratio || 'N/A'}</div>
-                        </div>
-                    </div>
-                `;
-            } catch (error) {
-                console.error('Failed to load results:', error);
-                document.getElementById('resultsContent').innerHTML =
-                    `<div class="error">Failed to load results</div>`;
             }
         }
 
@@ -965,7 +953,7 @@
 
                 let html = `
                     <div class="table-container">
-                        <table>
+                        <table style="width: 100%; table-layout: auto;">
                             <thead>
                                 <tr>
                                     <th>Date</th>
@@ -979,7 +967,8 @@
                             <tbody>
                 `;
 
-                data.trades.forEach(trade => {
+                // 최신 거래가 상단에 오도록 역순으로 정렬
+                data.trades.slice().reverse().forEach(trade => {
                     const type = trade.type || trade.action || 'N/A';
                     const badgeClass = type.toLowerCase().includes('buy') ? 'badge-buy' : 'badge-sell';
 
@@ -1112,6 +1101,41 @@
             } catch (error) {
                 console.error('Failed to update initial capital:', error);
                 alert('초기 자산 설정 중 오류가 발생했습니다.');
+            }
+        }
+
+        async function updateStartDate() {
+            try {
+                const input = document.getElementById('startDateInput');
+                const value = input.value;
+
+                if (!value) {
+                    alert('날짜를 입력해주세요.');
+                    return;
+                }
+
+                // YYYY-MM-DD 형식을 ISO 형식으로 변환 (YYYY-MM-DDTHH:MM:SS)
+                const dateStr = value + 'T00:00:00';
+
+                const response = await fetchWithTimeout(`${API_BASE}/api/start_date`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ start_date: dateStr })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('시작 날짜가 설정되었습니다.');
+                    loadBalance(); // Reload balance to show the updated elapsed days and daily return
+                } else {
+                    alert('시작 날짜 설정 실패: ' + (data.detail || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Failed to update start date:', error);
+                alert('시작 날짜 설정 중 오류가 발생했습니다.');
             }
         }
     </script>

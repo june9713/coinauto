@@ -1,14 +1,15 @@
 {
   "initialized": true,
-  "initial_capital": 26943.651183,
-  "actual_cash": 26089.284753,
+  "initial_capital": 26008.0,
+  "actual_cash": 25643.335133,
   "actual_coin_amount": 0.0,
   "ticker": "BTC",
   "last_backtest_status": "none",
-  "last_update": "2025-11-04T23:21:20.662948",
+  "last_update": "2025-11-08T09:30:26.696502",
   "sync_needed": false,
   "holding_state": false,
   "buy_price": null,
   "buy_condition_date": null,
-  "buy_execution_date": null
+  "buy_execution_date": null,
+  "start_date": "2025-11-05T00:55:36.736384"
 }
