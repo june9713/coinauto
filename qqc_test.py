@@ -27,7 +27,7 @@ class QQCTestEngine:
         - volume_multiplier (float): 거래량 배수. None이면 기본값 1.4 사용
         - buy_cash_ratio (float): 매수시 사용할 현금 비율 (0.0~1.0). None이면 기본값 0.9 사용
         - hold_period (int): 매수 후 보유 기간 (캔들 수). None이면 기본값 15 사용
-        - profit_target (float): 이익실현 목표 수익률 (%). None이면 기본값 17.6 사용
+        - profit_target (float): 이익실현 목표 수익률 (%). None이면 기본값 0.3 사용
         - stop_loss (float): 손절 기준 수익률 (%). None이면 기본값 -28.6 사용
         - initial_holding_state (bool): 초기 코인 보유 상태 (백테스트용). None이면 False 사용
         - saved_buy_price (float): 저장된 매수 가격. None이면 없음
@@ -44,7 +44,7 @@ class QQCTestEngine:
         self.volume_multiplier = volume_multiplier if volume_multiplier is not None else 1.4
         self.buy_cash_ratio = buy_cash_ratio if buy_cash_ratio is not None else 0.9
         self.hold_period = hold_period if hold_period is not None else 15
-        self.profit_target = profit_target if profit_target is not None else 17.6
+        self.profit_target = profit_target if profit_target is not None else 0.3
         self.stop_loss = stop_loss if stop_loss is not None else -28.6
 
         # interval 설정 및 분 단위 변환
@@ -506,7 +506,7 @@ class QQCTestEngine:
                 print(f"\n[경고] 매수 시점 정보가 없어 보유 기간을 계산할 수 없습니다.")
                 return None
 
-            # 조건 1: n+15 캔들이 되기 전에 수익률 17.6%면 매도
+            # 조건 1: n+15 캔들이 되기 전에 수익률 0.3%면 매도
             if current_return >= self.profit_target:
                 return self._execute_sell(candle, current_candle_index, 'SELL (이익실현)')
 

@@ -118,7 +118,7 @@ def _run_background_task():
             volume_multiplier=1.4,
             buy_cash_ratio=0.9,
             hold_period=15,
-            profit_target=17.6,
+            profit_target=0.3,
             stop_loss=-28.6,
             auto_initialize=True  # 서버 모드에서는 자동 초기화
         )

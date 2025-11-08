@@ -47,7 +47,7 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
     - volume_multiplier (float, optional): 거래량 배수. None이면 기본값 1.4 사용
     - buy_cash_ratio (float, optional): 매수시 사용할 현금 비율 (0.0~1.0). None이면 기본값 0.9 사용
     - hold_period (int, optional): 매수 후 보유 기간 (캔들 수). None이면 기본값 15 사용
-    - profit_target (float, optional): 이익실현 목표 수익률 (%). None이면 기본값 17.6 사용
+    - profit_target (float, optional): 이익실현 목표 수익률 (%). None이면 기본값 0.3 사용
     - stop_loss (float, optional): 손절 기준 수익률 (%). None이면 기본값 -28.6 사용
     - saved_state (dict, optional): 저장된 거래 상태. None이면 새로운 상태로 시작
     """
@@ -88,7 +88,7 @@ def main(start_date='2014-01-01', end_date=None, initial_capital=None,
         volume_multiplier_val = volume_multiplier if volume_multiplier is not None else 1.4
         buy_cash_ratio_val = buy_cash_ratio if buy_cash_ratio is not None else 0.9
         hold_period_val = hold_period if hold_period is not None else 15
-        profit_target_val = profit_target if profit_target is not None else 17.6
+        profit_target_val = profit_target if profit_target is not None else 0.3
         stop_loss_val = stop_loss if stop_loss is not None else -28.6
         
         # 조건 딕셔너리 생성 (initial_capital은 trade_state.json의 값 사용)
@@ -913,7 +913,7 @@ def run_server_mode(start_date='2014-01-01', end_date=None, initial_capital=None
         volume_multiplier_val = volume_multiplier if volume_multiplier is not None else 1.4
         buy_cash_ratio_val = buy_cash_ratio if buy_cash_ratio is not None else 0.9
         hold_period_val = hold_period if hold_period is not None else 15
-        profit_target_val = profit_target if profit_target is not None else 17.6
+        profit_target_val = profit_target if profit_target is not None else 0.3
         stop_loss_val = stop_loss if stop_loss is not None else -28.6
         price_slip_val = price_slippage or Config.DEFAULT_PRICE_SLIPPAGE
         
@@ -1142,7 +1142,7 @@ if __name__ == "__main__":
     volume_multiplier = 1.4  # 거래량 배수
     buy_cash_ratio = 0.9  # 매수시 사용할 현금 비율 (0.9 = 90%)
     hold_period = 15  # 매수 후 보유 기간 (캔들 수)
-    profit_target = 17.6  # 이익실현 목표 수익률 (%)
+    profit_target = 0.3  # 이익실현 목표 수익률 (%)
     stop_loss = -28.6  # 손절 기준 수익률 (%)
     ticker = 'BTC'
     interval = '3m'

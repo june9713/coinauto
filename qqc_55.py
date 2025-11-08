@@ -335,7 +335,7 @@ def analyze_last_55_data(ticker='BTC', interval='3m',
     - volume_multiplier (float, optional): 거래량 배수. None이면 기본값 1.4 사용
     - buy_cash_ratio (float, optional): 매수시 사용할 현금 비율. None이면 기본값 0.9 사용
     - hold_period (int, optional): 매수 후 보유 기간. None이면 기본값 15 사용
-    - profit_target (float, optional): 이익실현 목표 수익률. None이면 기본값 17.6 사용
+    - profit_target (float, optional): 이익실현 목표 수익률. None이면 기본값 0.3 사용
     - stop_loss (float, optional): 손절 기준 수익률. None이면 기본값 -28.6 사용
     - initial_capital (float, optional): 초기 자본. None이면 Config 기본값 사용
     - price_slippage (int, optional): 거래 가격 슬리퍼지. None이면 Config 기본값 사용
@@ -354,7 +354,7 @@ def analyze_last_55_data(ticker='BTC', interval='3m',
         volume_multiplier_val = volume_multiplier if volume_multiplier is not None else 1.4
         buy_cash_ratio_val = buy_cash_ratio if buy_cash_ratio is not None else 0.9
         hold_period_val = hold_period if hold_period is not None else 15
-        profit_target_val = profit_target if profit_target is not None else 17.6
+        profit_target_val = profit_target if profit_target is not None else 0.3
         stop_loss_val = stop_loss if stop_loss is not None else -28.6
         
         initial_cap_val = initial_capital or Config.DEFAULT_INITIAL_CAPITAL
@@ -517,7 +517,7 @@ if __name__ == "__main__":
     volume_multiplier = 0.8  # 거래량 배수
     buy_cash_ratio = 0.9  # 매수시 사용할 현금 비율
     hold_period = 15  # 매수 후 보유 기간
-    profit_target = 17.6  # 이익실현 목표 수익률
+    profit_target = 0.3  # 이익실현 목표 수익률
     stop_loss = -28.6  # 손절 기준 수익률
     
     # 분석 실행

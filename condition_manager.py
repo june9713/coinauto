@@ -99,7 +99,7 @@ class ConditionManager:
         
         Returns:
         - str: 조건 문자열 (예: "buy3.0_sell-4.0_sl-3.0_min20000_slip1000_w13_ar3_24h")
-                또는 QQC 전략: "qqc_vw55_mw9_vm1.4_bcr0.9_hp15_pt17.6_sl-28.6_slip1000_btc_3m")
+                또는 QQC 전략: "qqc_vw55_mw9_vm1.4_bcr0.9_hp15_pt0.3_sl-28.6_slip1000_btc_3m")
                 (참고: initial_capital은 파일명에 포함되지 않음)
         """
         try:

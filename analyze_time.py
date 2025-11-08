@@ -153,7 +153,7 @@ def analyze_backtest_decision(csv_path, backtest_config_path, target_times):
         print()
 
 if __name__ == "__main__":
-    csv_path = "/home/jay/workspace/python/2025/coinauto/datas/2025-11-03/history_vw55_mw9_vm1.4_bcr0.9_hp15_pt17.6_sl-28.6_slip1000_btc_3m_20251103_00.csv"
+    csv_path = "/home/jay/workspace/python/2025/coinauto/datas/2025-11-03/history_vw55_mw9_vm1.4_bcr0.9_hp15_pt0.3_sl-28.6_slip1000_btc_3m_20251103_00.csv"
     backtest_config_path = "/home/jay/workspace/python/2025/coinauto/backtest_conditions.json"
 
     # 분석할 시간
