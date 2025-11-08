@@ -334,7 +334,8 @@ def contrastive_loss(latent_vectors, temperature=0.5):
 # --- 6. 모델 학습 (신규 함수) ---
 # [Req 6, 7] 조기 종료를 포함한 학습 루프 + Contrastive Loss
 def train_autoencoder(model, train_loader, val_loader, model_path, epochs, lr, patience, device,
-                      contrastive_weight=0.1, warmup_epochs=5):
+                      contrastive_weight=0.1, warmup_epochs=5, output_dir=None,
+                      visualization_interval_hours=1):
     """
     트랜스포머 오토인코더 학습 함수
 
@@ -343,13 +344,48 @@ def train_autoencoder(model, train_loader, val_loader, model_path, epochs, lr, p
     - Learning Rate Warmup + Cosine Annealing
     - 상세한 학습 진행 시각화
     - Gradient Accumulation 지원
+    - 주기적 시각화 저장 (학습 진행 추적)
 
     Args:
         contrastive_weight: Contrastive Loss의 가중치 (기본 0.1)
         warmup_epochs: Warmup epoch 수
+        output_dir: 시각화 이미지를 저장할 디렉토리
+        visualization_interval_hours: 시각화 저장 간격 (시간 단위)
     """
     model.to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.005)  # 0.01 -> 0.005 (규제 완화)
+
+    # 시각화 디렉토리 생성
+    if output_dir:
+        viz_dir = os.path.join(output_dir, 'training_progress')
+        os.makedirs(viz_dir, exist_ok=True)
+        print(f"  시각화 저장 디렉토리: {viz_dir}")
+        print(f"  시각화 저장 간격: {visualization_interval_hours}시간")
+
+        # 초기 시각화 저장 (학습 전 상태)
+        print(f'\n{"="*70}')
+        print(f'  📊 초기 시각화 저장 중... (Epoch 0, 학습 시작 전)')
+        print(f'{"="*70}')
+
+        recon_init_path = os.path.join(viz_dir, '000_epoch0000_reconstruction.png')
+        try:
+            visualize_reconstruction_quality(
+                model=model,
+                dataloader=val_loader,
+                device=device,
+                save_path=recon_init_path,
+                num_samples=5
+            )
+            print(f'  ✓ 초기 재구축 품질: {recon_init_path}')
+        except Exception as e:
+            print(f'  ✗ 초기 재구축 품질 시각화 실패: {e}')
+
+        print(f'{"="*70}\n')
+
+    # 마지막 시각화 저장 시간 추적
+    import time
+    last_viz_time = time.time()
+    viz_counter = 0
 
     # MSE Loss (픽셀 레벨 재구축)
     mse_criterion = nn.MSELoss()
@@ -468,6 +504,66 @@ def train_autoencoder(model, train_loader, val_loader, model_path, epochs, lr, p
 
         # Learning Rate 조정
         scheduler.step()
+
+        # --- 주기적 시각화 저장 (1시간마다) ---
+        if output_dir:
+            current_time = time.time()
+            elapsed_hours = (current_time - last_viz_time) / 3600  # 초를 시간으로 변환
+
+            if elapsed_hours >= visualization_interval_hours:
+                viz_counter += 1
+                print(f'\n{"="*70}')
+                print(f'  📊 시각화 저장 중... (#{viz_counter}, Epoch {epoch})')
+                print(f'{"="*70}')
+
+                # 재구축 품질 시각화
+                recon_save_path = os.path.join(viz_dir, f'{viz_counter:03d}_epoch{epoch:04d}_reconstruction.png')
+                try:
+                    visualize_reconstruction_quality(
+                        model=model,
+                        dataloader=val_loader,
+                        device=device,
+                        save_path=recon_save_path,
+                        num_samples=5
+                    )
+                    print(f'  ✓ 재구축 품질: {recon_save_path}')
+                except Exception as e:
+                    print(f'  ✗ 재구축 품질 시각화 실패: {e}')
+
+                # t-SNE 잠재 공간 시각화 (샘플링하여 가벼운 버전으로)
+                tsne_save_path = os.path.join(viz_dir, f'{viz_counter:03d}_epoch{epoch:04d}_latent_tsne.png')
+                try:
+                    # 잠재 벡터 추출 (일부 샘플만 사용)
+                    model.eval()
+                    sampled_latents = []
+                    max_samples_for_tsne = 5000  # t-SNE는 비용이 크므로 샘플링
+
+                    with torch.no_grad():
+                        for i, data in enumerate(val_loader):
+                            if len(sampled_latents) * data.size(0) >= max_samples_for_tsne:
+                                break
+                            data = data.to(device)
+                            _, latent = model(data)
+                            sampled_latents.append(latent.cpu())
+
+                    if sampled_latents:
+                        sampled_latents_np = torch.cat(sampled_latents, dim=0).numpy()
+                        # 임시 레이블 (클러스터링 없이 단순 인덱스)
+                        temp_labels = np.arange(len(sampled_latents_np)) % 30
+
+                        visualize_latent_space_tsne(
+                            latent_vectors=sampled_latents_np,
+                            labels=temp_labels,
+                            save_path=tsne_save_path,
+                            title=f"Latent Space t-SNE (Epoch {epoch})"
+                        )
+                        print(f'  ✓ t-SNE 시각화: {tsne_save_path}')
+                except Exception as e:
+                    print(f'  ✗ t-SNE 시각화 실패: {e}')
+
+                # 마지막 저장 시간 업데이트
+                last_viz_time = current_time
+                print(f'{"="*70}\n')
 
         # --- Early Stopping Check ---
         early_stopper(val_total_loss, model)
@@ -942,7 +1038,9 @@ if __name__ == '__main__':
             patience=EARLY_STOPPING_PATIENCE,
             device=device,
             contrastive_weight=CONTRASTIVE_WEIGHT,
-            warmup_epochs=WARMUP_EPOCHS
+            warmup_epochs=WARMUP_EPOCHS,
+            output_dir=n_categories_dir,  # 시각화 저장 디렉토리
+            visualization_interval_hours=1  # 1시간마다 저장
         )
 
         # --- 5.5. 재구축 품질 시각화 ---
