@@ -54,7 +54,7 @@ nohup.out
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# Distribution / packaging
+# Distribution / packaging!
 dist/
 build/
 *.egg-info/
