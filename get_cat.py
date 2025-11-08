@@ -3,6 +3,7 @@ import glob
 import math
 import sys
 import traceback
+import warnings
 from collections import defaultdict
 from datetime import datetime
 import numpy as np
@@ -10,6 +11,9 @@ import pandas as pd
 import joblib
 import torch
 import torch.nn as nn
+
+# Sklearn 경고 무시
+warnings.filterwarnings('ignore', category=UserWarning, module='sklearn')
 
 # --- 모델 클래스 정의 (volume_opt.py와 동일) ---
 class PositionalEncoding(nn.Module):
@@ -35,40 +39,67 @@ class TransformerAutoencoder(nn.Module):
     """
     트랜스포머 인코더-디코더 기반 오토인코더 (패턴 압축기)
     [batch, seq_len, input_dim] -> [batch, latent_dim] -> [batch, seq_len, input_dim]
+    개선사항:
+    - 점진적 압축/확장으로 정보 손실 최소화
+    - Dropout 추가로 과적합 방지
     """
-    def __init__(self, input_dim, d_model, nhead, num_encoder_layers, num_decoder_layers, latent_dim, max_seq_len):
+    def __init__(self, input_dim, d_model, nhead, num_encoder_layers, num_decoder_layers, latent_dim, max_seq_len, dropout=0.1):
         super(TransformerAutoencoder, self).__init__()
         self.max_seq_len = max_seq_len
         self.d_model = d_model
-        
+
         # 1. Input Embedding (input_dim -> d_model)
         self.input_embed = nn.Linear(input_dim, d_model)
-        self.pos_encoder = PositionalEncoding(d_model, max_seq_len)
-        
+        self.pos_encoder = PositionalEncoding(d_model, max_seq_len, dropout=dropout)
+
         # 2. Encoder
-        encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=d_model*4, batch_first=True)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=d_model*4,
+            dropout=dropout,
+            batch_first=True
+        )
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_encoder_layers)
-        
+
         # 3. Bottleneck (d_model * seq_len -> latent_dim)
-        # 시퀀스 전체를 flatten하여 압축
+        # 점진적 압축으로 정보 손실 최소화
         self.to_latent = nn.Sequential(
-            nn.Linear(d_model * max_seq_len, d_model),
+            nn.Linear(d_model * max_seq_len, 512),
+            nn.LayerNorm(512),
             nn.ReLU(),
-            nn.Linear(d_model, latent_dim)
+            nn.Dropout(dropout),
+            nn.Linear(512, 256),
+            nn.LayerNorm(256),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(256, latent_dim)
         )
-        
+
         # 4. Decoder Input (latent_dim -> d_model * seq_len)
+        # 점진적 확장으로 복원 품질 향상
         self.from_latent = nn.Sequential(
-            nn.Linear(latent_dim, d_model),
+            nn.Linear(latent_dim, 256),
+            nn.LayerNorm(256),
             nn.ReLU(),
-            nn.Linear(d_model, d_model * max_seq_len)
+            nn.Dropout(dropout),
+            nn.Linear(256, 512),
+            nn.LayerNorm(512),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(512, d_model * max_seq_len)
         )
-        
+
         # 5. Decoder (TransformerEncoder 층을 디코더로 활용)
-        # num_decoder_layers 파라미터 사용
-        decoder_layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=d_model*4, batch_first=True)
+        decoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=d_model*4,
+            dropout=dropout,
+            batch_first=True
+        )
         self.transformer_decoder = nn.TransformerEncoder(decoder_layer, num_layers=num_decoder_layers)
-        
+
         # 6. Output Layer (d_model -> input_dim)
         self.output_layer = nn.Linear(d_model, input_dim)
 
@@ -103,48 +134,63 @@ class TransformerAutoencoder(nn.Module):
         return reconstructed, latent
 
 # --- 카테고리 추론 함수 (volume_opt.py와 동일) ---
-def get_pattern_category(new_data_ticks, autoencoder, kmeans_model, scaler, seq_len, device):
+def get_pattern_category(new_data_ticks, autoencoder, kmeans_model, feature_scalers, seq_len, device):
     """
     새로운 데이터(A틱)를 받아 어떤 패턴 카테고리에 속하는지 추론합니다.
-    
+
     Args:
         new_data_ticks (np.array): (seq_len, num_features) 형태의 원본 데이터
+        feature_scalers (dict): Feature별 독립 Scaler 딕셔너리
     """
-    
+
     # 입력 데이터 검증
     if new_data_ticks.shape[0] != seq_len:
         raise ValueError(f"입력 데이터 길이는 {seq_len}이어야 합니다. (현재: {new_data_ticks.shape[0]})")
-    if new_data_ticks.shape[1] != scaler.n_features_in_:
-        raise ValueError(f"입력 피처 개수는 {scaler.n_features_in_}개여야 합니다. (현재: {new_data_ticks.shape[1]})")
 
-    # 1. Scale (feature names를 사용하여 DataFrame으로 변환 후 transform)
-    # scaler가 feature names와 함께 fit되었으므로 DataFrame으로 변환 필요
-    if hasattr(scaler, 'feature_names_in_'):
-        feature_names = scaler.feature_names_in_
-    else:
-        # feature_names_in_이 없는 경우 (구버전 sklearn) 기본 이름 사용
-        feature_names = [f'feature_{i}' for i in range(new_data_ticks.shape[1])]
-    
-    df_ticks = pd.DataFrame(new_data_ticks, columns=feature_names)
-    scaled_data = scaler.transform(df_ticks)
-    
+    n_features = len(feature_scalers)
+    if new_data_ticks.shape[1] != n_features:
+        raise ValueError(f"입력 피처 개수는 {n_features}개여야 합니다. (현재: {new_data_ticks.shape[1]})")
+
+    # 1. Feature별 독립 스케일링 적용
+    scaled_data = np.zeros_like(new_data_ticks, dtype=np.float32)
+    feature_names = list(feature_scalers.keys())
+
+    for i, feature_name in enumerate(feature_names):
+        scaler = feature_scalers[feature_name]
+        scaled_data[:, i] = scaler.transform(new_data_ticks[:, i:i+1]).flatten()
+
     # 2. Convert to Tensor (Batch 차원 추가)
     data_tensor = torch.tensor(scaled_data, dtype=torch.float32).unsqueeze(0).to(device)
-    
+
     # 3. Get latent vector
     autoencoder.to(device)
     autoencoder.eval()
     with torch.no_grad():
         _, latent = autoencoder(data_tensor) # (reconstructed, latent)
-    
+
     # 4. Predict category
     latent_np = latent.cpu().numpy()
-    category = kmeans_model.predict(latent_np)
-    
-    return category[0] # [batch_size=1]이므로 첫 번째 결과 반환
+    category = kmeans_model.predict(latent_np)[0]
+
+    # 5. 불명확 카테고리 판단
+    # 가장 가까운 클러스터 중심까지의 거리 계산
+    distances = kmeans_model.transform(latent_np)
+    min_distance = np.min(distances)
+
+    # 클러스터 중심 간 평균 거리를 기준으로 임계값 설정
+    n_clusters = kmeans_model.n_clusters
+    cluster_centers = kmeans_model.cluster_centers_
+    center_distances = np.linalg.norm(cluster_centers[:, np.newaxis] - cluster_centers, axis=2)
+    avg_center_distance = np.mean(center_distances[center_distances > 0])
+    distance_threshold = avg_center_distance * 0.5  # 중심 간 거리의 50%
+
+    if min_distance > distance_threshold:
+        category = n_clusters  # 불명확 카테고리로 재할당
+
+    return category  # 카테고리 번호 반환
 
 # --- 전체 CSV 파일들을 연속된 데이터로 처리하는 함수 ---
-def process_all_csv_files(csv_files, base_dir, output_base_dir, autoencoder, kmeans_model, scaler, features, seq_len, device, start_date=None):
+def process_all_csv_files(csv_files, base_dir, output_base_dir, autoencoder, kmeans_model, feature_scalers, features, seq_len, device, start_date=None):
     """
     모든 CSV 파일들을 시간순으로 연결하여 하나의 연속된 데이터로 처리합니다.
     
@@ -154,7 +200,7 @@ def process_all_csv_files(csv_files, base_dir, output_base_dir, autoencoder, kme
         output_base_dir (str): 출력 기본 디렉토리
         autoencoder: 학습된 오토인코더 모델
         kmeans_model: 학습된 KMeans 모델
-        scaler: 학습된 스케일러
+        feature_scalers: Feature별 독립 스케일러 딕셔너리
         features (list): 사용할 피처 컬럼명 리스트
         seq_len (int): 시퀀스 길이
         device: PyTorch 장치
@@ -280,7 +326,7 @@ def process_all_csv_files(csv_files, base_dir, output_base_dir, autoencoder, kme
                     new_data_ticks=window_data,
                     autoencoder=autoencoder,
                     kmeans_model=kmeans_model,
-                    scaler=scaler,
+                    feature_scalers=feature_scalers,
                     seq_len=seq_len,
                     device=device
                 )
@@ -345,26 +391,27 @@ def process_all_csv_files(csv_files, base_dir, output_base_dir, autoencoder, kme
 
 # --- 메인 함수 ---
 def main():
-    # 하이퍼파라미터 설정 (하드코딩)
+    # 하이퍼파라미터 설정 (volume_opt.py와 동일하게 맞춤)
     BASE_DIR = './dumps'
     OUTPUT_DIR = './dumps2'
     TICKER = 'BTC'
     INTERVAL = '3m'
     TRAIN_TYPE = 'price'
     SEQUENCE_LENGTH = 50
-    N_CATEGORIES = 1000
-    START_DATE = '2025-10-5'  # 이 날짜 이후의 데이터만 처리
-    
-    FEATURES = ['open', 'high', 'low', 'close', 'volume', 'ma5', 'ma7', 'ma10']
-    INPUT_DIM = len(FEATURES) # 8
+    N_CATEGORIES = 100  # volume_opt.py와 동일
+    START_DATE = '2025-10-05'  # YYYY-MM-DD 형식으로 수정
+
+    # volume_opt.py와 동일한 FEATURES
+    FEATURES = ['open', 'high', 'low', 'close']
+    INPUT_DIM = len(FEATURES)  # 4
     MAX_SEQ_LEN = SEQUENCE_LENGTH
-    
-    # 모델 파라미터
-    D_MODEL = 64
-    NHEAD = 4
-    NUM_ENCODER_LAYERS = 3
-    NUM_DECODER_LAYERS = 3
-    LATENT_DIM = 32
+
+    # 모델 파라미터 (volume_opt.py와 동일)
+    D_MODEL = 128
+    NHEAD = 8
+    NUM_ENCODER_LAYERS = 4
+    NUM_DECODER_LAYERS = 4
+    LATENT_DIM = 256
     
     # 모델 파일 경로
     MODELS_DIR = './models'
@@ -374,9 +421,9 @@ def main():
     MODEL_PATH = os.path.join(sequence_length_dir, 'transformer_autoencoder.pth')
     KMEANS_PATH = os.path.join(sequence_length_dir, 'pattern_categories.joblib')
     
-    # 장치 설정 (CPU로 고정)
-    device = torch.device("cpu")
-    
+    # 장치 설정 (GPU 우선 사용)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     print("="*60)
     print("       패턴 카테고리 예측 및 저장 프로그램")
     print("="*60)
@@ -385,7 +432,11 @@ def main():
     print(f"티커: {TICKER}")
     print(f"인터벌: {INTERVAL}")
     print(f"시퀀스 길이: {SEQUENCE_LENGTH}")
-    print(f"장치: {device} (CPU 전용)")
+    print(f"PyTorch 버전: {torch.__version__}")
+    print(f"CUDA 사용 가능: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        print(f"사용 중인 GPU: {torch.cuda.get_device_name(0)}")
+    print(f"선택된 장치: {device}")
     print("="*60)
     
     # 1. 모델 파일 존재 확인
@@ -449,7 +500,7 @@ def main():
         output_base_dir=OUTPUT_DIR,
         autoencoder=autoencoder,
         kmeans_model=kmeans_model,
-        scaler=scaler,
+        feature_scalers=scaler,  # feature_scalers로 전달 (dict 타입)
         features=FEATURES,
         seq_len=SEQUENCE_LENGTH,
         device=device,

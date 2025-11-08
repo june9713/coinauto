@@ -377,38 +377,170 @@ def _get_day_candles_with_to(market, to_date, count=200):
 def add_moving_averages(df):
     """
     데이터프레임에 이동평균 컬럼을 추가합니다.
-    
+
     Parameters:
     - df (pd.DataFrame): OHLCV 데이터프레임 (close 컬럼 필요)
-    
+
     Returns:
     - pd.DataFrame: 이동평균 컬럼이 추가된 데이터프레임
     """
     try:
         if df is None or len(df) == 0:
             return df
-        
+
         if 'close' not in df.columns:
             print("  경고: 'close' 컬럼이 없어 이동평균을 계산할 수 없습니다.")
             return df
-        
+
         # 데이터프레임 복사
         df_copy = df.copy()
-        
+
         # 시간순 정렬 (이동평균 계산을 위해 필수)
         df_copy = df_copy.sort_index()
-        
+
         # 이동평균 계산 (ma5, ma7, ma10)
         ma_periods = [5, 7, 10]
         for period in ma_periods:
             col_name = f'ma{period}'
             df_copy[col_name] = df_copy['close'].rolling(window=period, min_periods=1).mean()
-        
+
         return df_copy
-        
+
     except Exception as e:
         err = traceback.format_exc()
         print(f"  이동평균 계산 오류: {err}")
+        return df
+
+
+def add_check_5_10(df):
+    """
+    데이터프레임에 check_5_10 컬럼을 추가합니다.
+    ma5 > ma10이면 1.0, 그렇지 않으면 0.0으로 설정합니다.
+
+    Parameters:
+    - df (pd.DataFrame): ma5와 ma10 컬럼이 있는 데이터프레임
+
+    Returns:
+    - pd.DataFrame: check_5_10 컬럼이 추가된 데이터프레임
+    """
+    try:
+        if df is None or len(df) == 0:
+            return df
+
+        if 'ma5' not in df.columns or 'ma10' not in df.columns:
+            print("  경고: 'ma5' 또는 'ma10' 컬럼이 없어 check_5_10을 계산할 수 없습니다.")
+            return df
+
+        # 데이터프레임 복사
+        df_copy = df.copy()
+
+        # check_5_10 컬럼 추가: ma5 > ma10이면 1.0, 아니면 0.0
+        df_copy['check_5_10'] = (df_copy['ma5'] > df_copy['ma10']).astype(float)
+
+        return df_copy
+
+    except Exception as e:
+        err = traceback.format_exc()
+        print(f"  check_5_10 계산 오류: {err}")
+        return df
+
+
+def add_pon(df):
+    """
+    데이터프레임에 PON 컬럼을 추가합니다.
+    종가가 시가보다 크면 1.0, 그렇지 않으면 0.0으로 설정합니다.
+
+    Parameters:
+    - df (pd.DataFrame): open과 close 컬럼이 있는 데이터프레임
+
+    Returns:
+    - pd.DataFrame: PON 컬럼이 추가된 데이터프레임
+    """
+    try:
+        if df is None or len(df) == 0:
+            return df
+
+        if 'open' not in df.columns or 'close' not in df.columns:
+            print("  경고: 'open' 또는 'close' 컬럼이 없어 PON을 계산할 수 없습니다.")
+            return df
+
+        # 데이터프레임 복사
+        df_copy = df.copy()
+
+        # PON 컬럼 추가: close > open이면 1.0, 아니면 0.0
+        df_copy['PON'] = (df_copy['close'] > df_copy['open']).astype(float)
+
+        return df_copy
+
+    except Exception as e:
+        err = traceback.format_exc()
+        print(f"  PON 계산 오류: {err}")
+        return df
+
+
+def add_diff_s2e(df):
+    """
+    데이터프레임에 diff_s2e 컬럼을 추가합니다.
+    종가 - 시가의 값을 저장합니다.
+
+    Parameters:
+    - df (pd.DataFrame): open과 close 컬럼이 있는 데이터프레임
+
+    Returns:
+    - pd.DataFrame: diff_s2e 컬럼이 추가된 데이터프레임
+    """
+    try:
+        if df is None or len(df) == 0:
+            return df
+
+        if 'open' not in df.columns or 'close' not in df.columns:
+            print("  경고: 'open' 또는 'close' 컬럼이 없어 diff_s2e를 계산할 수 없습니다.")
+            return df
+
+        # 데이터프레임 복사
+        df_copy = df.copy()
+
+        # diff_s2e 컬럼 추가: close - open
+        df_copy['diff_s2e'] = (df_copy['close'] - df_copy['open']).astype(float)
+
+        return df_copy
+
+    except Exception as e:
+        err = traceback.format_exc()
+        print(f"  diff_s2e 계산 오류: {err}")
+        return df
+
+
+def add_diff_h2l(df):
+    """
+    데이터프레임에 diff_h2l 컬럼을 추가합니다.
+    high - low의 값을 저장합니다.
+
+    Parameters:
+    - df (pd.DataFrame): high와 low 컬럼이 있는 데이터프레임
+
+    Returns:
+    - pd.DataFrame: diff_h2l 컬럼이 추가된 데이터프레임
+    """
+    try:
+        if df is None or len(df) == 0:
+            return df
+
+        if 'high' not in df.columns or 'low' not in df.columns:
+            print("  경고: 'high' 또는 'low' 컬럼이 없어 diff_h2l을 계산할 수 없습니다.")
+            return df
+
+        # 데이터프레임 복사
+        df_copy = df.copy()
+
+        # diff_h2l 컬럼 추가: high - low
+        df_copy['diff_h2l'] = (df_copy['high'] - df_copy['low']).astype(float)
+
+        return df_copy
+
+    except Exception as e:
+        err = traceback.format_exc()
+        print(f"  diff_h2l 계산 오류: {err}")
         return df
 
 
@@ -499,7 +631,18 @@ def save_history_to_dumps(df, ticker='BTC', interval='3m', base_dir='./dumps', i
                         # 이동평균 추가 (옵션에 따라)
                         if include_ma:
                             combined_df = add_moving_averages(combined_df)
-                        
+                            # check_5_10 컬럼 추가 (이동평균이 있을 때만)
+                            combined_df = add_check_5_10(combined_df)
+
+                        # PON 컬럼 추가 (항상)
+                        combined_df = add_pon(combined_df)
+
+                        # diff_s2e 컬럼 추가 (항상)
+                        combined_df = add_diff_s2e(combined_df)
+
+                        # diff_h2l 컬럼 추가 (항상)
+                        combined_df = add_diff_h2l(combined_df)
+
                         # 덮어쓰기된 데이터 저장
                         combined_df.to_csv(save_path, index=True)
                         print(f"  {filename}: 기존 {original_count}개 + 새 {len(hour_df)}개 (덮어쓰기: {overwritten_count}개) = {len(combined_df)}개")
@@ -509,6 +652,17 @@ def save_history_to_dumps(df, ticker='BTC', interval='3m', base_dir='./dumps', i
                         # 이동평균 추가 (옵션에 따라)
                         if include_ma:
                             hour_df = add_moving_averages(hour_df)
+                            # check_5_10 컬럼 추가 (이동평균이 있을 때만)
+                            hour_df = add_check_5_10(hour_df)
+                        # PON 컬럼 추가 (항상)
+                        hour_df = add_pon(hour_df)
+
+                        # diff_s2e 컬럼 추가 (항상)
+                        hour_df = add_diff_s2e(hour_df)
+
+                        # diff_h2l 컬럼 추가 (항상)
+                        hour_df = add_diff_h2l(hour_df)
+
                         hour_df.to_csv(save_path, index=True)
                         print(f"  {filename}: 새 데이터 {len(hour_df)}개 저장")
                 else:
@@ -516,6 +670,17 @@ def save_history_to_dumps(df, ticker='BTC', interval='3m', base_dir='./dumps', i
                     # 이동평균 추가 (옵션에 따라)
                     if include_ma:
                         hour_df = add_moving_averages(hour_df)
+                        # check_5_10 컬럼 추가 (이동평균이 있을 때만)
+                        hour_df = add_check_5_10(hour_df)
+                    # PON 컬럼 추가 (항상)
+                    hour_df = add_pon(hour_df)
+
+                    # diff_s2e 컬럼 추가 (항상)
+                    hour_df = add_diff_s2e(hour_df)
+
+                    # diff_h2l 컬럼 추가 (항상)
+                    hour_df = add_diff_h2l(hour_df)
+
                     hour_df.to_csv(save_path, index=True)
                     print(f"  {filename}: 새 데이터 {len(hour_df)}개 저장")
                 
