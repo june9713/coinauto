@@ -38,6 +38,7 @@ Thumbs.db
 backtest_result*.jpg
 backtest_result*.png
 trade_state.json
+nohup.out
 *.joblib
 *.pth
 *.pkl
